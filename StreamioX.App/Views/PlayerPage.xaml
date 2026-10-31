@@ -1,5 +1,4 @@
-﻿<!-- Views/PlayerPage.xaml -->
-<Page
+﻿<Page
     x:Class="StreamioX.App.Views.PlayerPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -10,13 +9,13 @@
     XYFocusKeyboardNavigation="Enabled">
 
     <Grid>
-        <!-- Native UWP MediaPlayerElement supporting HTTP, HLS, and DASH streams -->
+        <!-- Native UWP MediaPlayerElement supporting HTTP, HLS, DASH, and sequential streams -->
         <MediaPlayerElement x:Name="PlayerWidget" 
                             AreTransportControlsEnabled="True"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"/>
 
-        <!-- Optional Custom Overlay for Title / Back Navigation via Xbox Controller B Button -->
+        <!-- Top Title Overlay -->
         <Grid VerticalAlignment="Top" Padding="48,27,48,27" Background="#B305060A">
             <TextBlock Text="{Binding MediaTitle}" 
                        Foreground="#FFFFFF" 

@@ -7,8 +7,26 @@
 
     <Grid Padding="48,27,48,27">
         <StackPanel Spacing="16">
-            <TextBlock Text="Home" Foreground="{StaticResource TextPrimaryBrush}" FontSize="36" FontWeight="SemiBold"/>
-            <TextBlock Text="{Binding WelcomeMessage}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="20"/>
+
+            <TextBlock
+                Text="Home"
+                Foreground="#FFFFFF"
+                FontSize="36"
+                FontWeight="SemiBold"/>
+
+            <TextBlock
+                Text="{Binding WelcomeMessage}"
+                Foreground="#A0A4B8"
+                FontSize="20"/>
+
+            <Button
+                x:Name="ExploreDiscoverButton"
+                Content="Explore Discover"
+                MinWidth="220"
+                MinHeight="56"
+                HorizontalAlignment="Left"
+                Click="ExploreDiscover_Click"/>
+
         </StackPanel>
     </Grid>
 </Page>

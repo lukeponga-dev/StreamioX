@@ -23,7 +23,7 @@ namespace StreamioX.App.ViewModels
         }
 
         /// <summary>
-        /// Navigates the active frame to the Home dashboard view.
+        /// Navigates the active frame to the Home dashboard view[cite: 1].
         /// </summary>
         [RelayCommand]
         private void NavigateToHome()
@@ -32,7 +32,7 @@ namespace StreamioX.App.ViewModels
         }
 
         /// <summary>
-        /// Navigates the active frame to the Discover catalog view.
+        /// Navigates the active frame to the Discover catalog view[cite: 1].
         /// </summary>
         [RelayCommand]
         private void NavigateToDiscover()
@@ -41,7 +41,7 @@ namespace StreamioX.App.ViewModels
         }
 
         /// <summary>
-        /// Navigates the active frame to the user's Library view.
+        /// Navigates the active frame to the user's Library view[cite: 1].
         /// </summary>
         [RelayCommand]
         private void NavigateToLibrary()
@@ -50,7 +50,7 @@ namespace StreamioX.App.ViewModels
         }
 
         /// <summary>
-        /// Navigates the active frame to the Add-ons manager view.
+        /// Navigates the active frame to the Add-ons manager view[cite: 1].
         /// </summary>
         [RelayCommand]
         private void NavigateToAddons()
@@ -58,24 +58,31 @@ namespace StreamioX.App.ViewModels
             _navigationService.NavigateTo(NavigationRoute.Addons);
         }
 
+        /// <summary>
+        /// Navigates the active frame to the native video player view[cite: 1].
+        /// </summary>
         [RelayCommand]
         private void NavigateToPlayer()
         {
             _navigationService.NavigateTo(NavigationRoute.Player);
         }
-        [RelayCommand]
-        private void NavigateToDiagnostic()
-        {
-            _navigationService.NavigateTo(NavigationRoute.Diagnostics);
-        }
+
         /// <summary>
-        /// Navigates the active frame to the Settings view.
+        /// Navigates the active frame to the Settings view[cite: 1].
         /// </summary>
         [RelayCommand]
         private void NavigateToSettings()
         {
             _navigationService.NavigateTo(NavigationRoute.Settings);
         }
-       
+
+        /// <summary>
+        /// Navigates the active frame to the System Diagnostics view[cite: 1].
+        /// </summary>
+        [RelayCommand]
+        private void NavigateToDiagnostic()
+        {
+            _navigationService.NavigateTo(NavigationRoute.Diagnostics);
+        }
     }
 }

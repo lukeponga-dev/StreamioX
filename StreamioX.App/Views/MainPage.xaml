@@ -1,5 +1,4 @@
-﻿<!-- Views/MainPage.xaml -->
-<Page
+﻿<Page
     x:Class="StreamioX.App.Views.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -23,12 +22,17 @@
     <Grid Padding="{x:Bind layout:XboxConstants.SafeArea}">
         <NavigationView x:Name="NavShell"
                         PaneDisplayMode="Left"
+                        IsSettingsVisible="True"
                         IsBackButtonVisible="Collapsed"
                         AlwaysShowHeader="False"
+                        XYFocusKeyboardNavigation="Enabled"
                         ItemInvoked="NavShell_ItemInvoked">
 
+            <!-- Primary Navigation Destinations -->
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Home" Tag="Home">
+                <NavigationViewItem x:Name="HomeNavItem"
+                                    Content="Home" 
+                                    Tag="Home">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE80F;" />
                     </NavigationViewItem.Icon>
@@ -55,10 +59,13 @@
                 </NavigationViewItem>
                 <NavigationViewItem Content="Diagnostic" Tag="Diagnostic">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE714;" />
+                        <FontIcon Glyph="&#xE9D9;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
+
+            <!-- Bottom Menu Items for Settings -->
+     
 
             <!-- Content Area managed by INavigationService -->
             <Frame x:Name="ContentFrame" XYFocusKeyboardNavigation="Enabled" />

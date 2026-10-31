@@ -1,30 +1,57 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
+﻿using StreamioX.App.Helpers;
+using StreamioX.App.Models;
+using StreamioX.App.Services;
+using StreamioX.App.ViewModels;
+using System.Net.Http;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
-
-// The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=234238
 
 namespace StreamioX.App.Views
 {
-    /// <summary>
-    /// An empty page that can be used on its own or navigated to within a Frame.
-    /// </summary>
     public sealed partial class DiscoverPage : Page
     {
+        public DiscoverViewModel ViewModel { get; }
+
         public DiscoverPage()
         {
             InitializeComponent();
+
+            var httpClient = new HttpClient();
+            var stremioClient = new StremioClient(httpClient);
+            var catalogService = new CatalogService(stremioClient);
+
+            ViewModel = new DiscoverViewModel(catalogService);
+            DataContext = ViewModel;
+
+            Loaded += DiscoverPage_Loaded;
+        }
+
+        private void DiscoverPage_Loaded(object sender, RoutedEventArgs e)
+        {
+            FocusHelper.Restore(this, CatalogGrid);
+        }
+
+        protected override async void OnNavigatedTo(NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
+            await ViewModel.LoadCatalogAsync();
+        }
+
+        protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
+        {
+            FocusHelper.Capture(this, CatalogGrid);
+            base.OnNavigatingFrom(e);
+        }
+
+        private void GridView_ItemClick(
+            object sender,
+            ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is Movie selectedMovie)
+            {
+                Frame.Navigate(typeof(DetailsPage), selectedMovie);
+            }
         }
     }
 }

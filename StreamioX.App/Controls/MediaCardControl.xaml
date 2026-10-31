@@ -43,7 +43,7 @@
                                 <ScaleTransform x:Name="ScaleTransform" CenterX="100" CenterY="150" ScaleX="1.0" ScaleY="1.0"/>
                             </Grid.RenderTransform>
 
-                            <!-- Poster Image with Border Clipping -->
+                            <!-- Poster Image with Corner Radius Clipping -->
                             <Border CornerRadius="8">
                                 <Image x:Name="PosterImage" Stretch="UniformToFill" Source="{Binding PosterUrl}" />
                             </Border>
