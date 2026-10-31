@@ -1,0 +1,14 @@
+﻿<Page
+    x:Class="StreamioX.App.Views.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent"
+    XYFocusKeyboardNavigation="Enabled">
+
+    <Grid Padding="48,27,48,27">
+        <StackPanel Spacing="16">
+            <TextBlock Text="Home" Foreground="{StaticResource TextPrimaryBrush}" FontSize="36" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding WelcomeMessage}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="20"/>
+        </StackPanel>
+    </Grid>
+</Page>
