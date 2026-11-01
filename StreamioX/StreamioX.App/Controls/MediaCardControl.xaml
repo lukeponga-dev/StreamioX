@@ -1,0 +1,74 @@
+﻿<UserControl
+    x:Class="StreamioX.App.Controls.MediaCardControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    IsTabStop="True"
+    UseSystemFocusVisuals="False">
+
+    <UserControl.Resources>
+        <Style TargetType="UserControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="UserControl">
+                        <Grid x:Name="RootGrid" Background="{StaticResource SurfaceBrush}" CornerRadius="8" Width="200" Height="300">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Unfocused">
+                                        <Storyboard>
+                                            <DoubleAnimation Duration="0:0:0.12" To="1.0" Storyboard.TargetName="ScaleTransform" Storyboard.TargetProperty="ScaleX"/>
+                                            <DoubleAnimation Duration="0:0:0.12" To="1.0" Storyboard.TargetName="ScaleTransform" Storyboard.TargetProperty="ScaleY"/>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="GlowBorder" Storyboard.TargetProperty="Visibility">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Focused">
+                                        <Storyboard>
+                                            <!-- 1.05x Scale Animation on Compositor Thread -->
+                                            <DoubleAnimation Duration="0:0:0.12" To="1.05" Storyboard.TargetName="ScaleTransform" Storyboard.TargetProperty="ScaleX"/>
+                                            <DoubleAnimation Duration="0:0:0.12" To="1.05" Storyboard.TargetName="ScaleTransform" Storyboard.TargetProperty="ScaleY"/>
+                                            <!-- Illuminate Plasma Violet Glow -->
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="GlowBorder" Storyboard.TargetProperty="Visibility">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="Visible"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+
+                            <Grid.RenderTransform>
+                                <ScaleTransform x:Name="ScaleTransform" CenterX="100" CenterY="150" ScaleX="1.0" ScaleY="1.0"/>
+                            </Grid.RenderTransform>
+
+                            <!-- Poster Image with Corner Radius Clipping -->
+                            <Border CornerRadius="8">
+                                <Image x:Name="PosterImage" Stretch="UniformToFill" Source="{Binding PosterUrl}" />
+                            </Border>
+
+                            <!-- Plasma Violet Focus Glow Border -->
+                            <Border x:Name="GlowBorder" 
+                                    BorderBrush="{StaticResource FocusAccentBrush}" 
+                                    BorderThickness="3" 
+                                    CornerRadius="8" 
+                                    Visibility="Collapsed" />
+
+                            <!-- Title Overlay at Bottom -->
+                            <Border VerticalAlignment="Bottom" Background="#B305060A" Padding="8" CornerRadius="0,0,8,8">
+                                <TextBlock Text="{Binding Title}" 
+                                           Foreground="{StaticResource TextPrimaryBrush}" 
+                                           FontSize="14" 
+                                           FontWeight="SemiBold" 
+                                           TextTrimming="CharacterEllipsis"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid />
+</UserControl>
