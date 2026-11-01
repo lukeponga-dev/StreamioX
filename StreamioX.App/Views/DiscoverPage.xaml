@@ -5,7 +5,8 @@
     Background="Transparent"
     XYFocusKeyboardNavigation="Enabled">
 
-    <Grid Padding="48,27,48,27">
+    <!-- MainPage owns the TV safe-area padding; avoid applying it twice here. -->
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
