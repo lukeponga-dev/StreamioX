@@ -1,16 +1,19 @@
-﻿using StreamioX.App.ViewModels;
+﻿using StreamioX.App.Models;
+using StreamioX.App.ViewModels;
 using System;
 using Windows.Media.Core;
+using Windows.System.Display;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
 
 namespace StreamioX.App.Views
 {
     /// <summary>
-    /// Hosts the native video playback session for StremioX.App on Xbox.
+    /// Hosts the native video playback session for StreamioX.App on Xbox[cite: 1, 3].
     /// </summary>
     public sealed partial class PlayerPage : Page
     {
+        private DisplayRequest _displayRequest;
         public PlayerViewModel ViewModel { get; }
 
         public PlayerPage()
@@ -24,13 +27,32 @@ namespace StreamioX.App.Views
         {
             base.OnNavigatedTo(e);
 
-            // Expecting a stream URL string passed as a navigation parameter from DetailsPage or direct route
-            if (e.Parameter is string streamUrl && !string.IsNullOrWhiteSpace(streamUrl))
+            // Keep Xbox screen active during playback
+            if (_displayRequest == null)
             {
-                ViewModel.LoadStream(streamUrl, "Stremio Stream");
+                _displayRequest = new DisplayRequest();
+                _displayRequest.RequestActive();
+            }
 
-                // Initialize the native media player with the stream source and trigger playback
-                PlayerWidget.Source = MediaSource.CreateFromUri(new Uri(streamUrl));
+            string targetStreamUrl = null;
+            string targetMediaTitle = "Stremio Stream";
+
+            if (e.Parameter is string urlStr)
+            {
+                targetStreamUrl = urlStr;
+            }
+            else if (e.Parameter is StreamSource streamObj)
+            {
+                targetStreamUrl = streamObj.Url;
+                targetMediaTitle = !string.IsNullOrWhiteSpace(streamObj.Name) ? streamObj.Name : streamObj.Title;
+            }
+
+            if (!string.IsNullOrWhiteSpace(targetStreamUrl))
+            {
+                ViewModel.LoadStream(targetStreamUrl, targetMediaTitle);
+
+                // Assign MediaSource and initiate hardware-accelerated playback on Xbox
+                PlayerWidget.Source = MediaSource.CreateFromUri(new Uri(targetStreamUrl));
                 PlayerWidget.MediaPlayer.Play();
             }
         }
@@ -39,7 +61,14 @@ namespace StreamioX.App.Views
         {
             base.OnNavigatedFrom(e);
 
-            // Clean up player resources when leaving the page
+            // Release display lock[cite: 3]
+            if (_displayRequest != null)
+            {
+                _displayRequest.RequestRelease();
+                _displayRequest = null;
+            }
+
+            // Clean up player resources[cite: 1]
             if (PlayerWidget.MediaPlayer != null)
             {
                 PlayerWidget.MediaPlayer.Pause();

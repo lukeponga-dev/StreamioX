@@ -1,8 +1,8 @@
-﻿using StreamioX.App.Helpers;
-using StreamioX.App.ViewModels;
+﻿// Views/HomePage.xaml.cs
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Navigation;
+using StreamioX.App.Navigation;
+using StreamioX.App.ViewModels;
 
 namespace StreamioX.App.Views
 {
@@ -12,30 +12,28 @@ namespace StreamioX.App.Views
 
         public HomePage()
         {
-            InitializeComponent();
+            this.InitializeComponent();
 
-            ViewModel = new HomeViewModel();
-            DataContext = ViewModel;
+            var navigationService = new NavigationService();
+            if (Window.Current?.Content is Frame rootFrame)
+            {
+                navigationService.Initialize(rootFrame);
+            }
 
-            Loaded += HomePage_Loaded;
+            ViewModel = new HomeViewModel(navigationService);
+            this.DataContext = ViewModel;
         }
 
-        private void HomePage_Loaded(object sender, RoutedEventArgs e)
+        private void ExploreDiscover_Click(object sender, RoutedEventArgs e)
         {
-            FocusHelper.Restore(this, ExploreDiscoverButton);
-        }
-
-        protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
-        {
-            FocusHelper.Capture(this, ExploreDiscoverButton);
-            base.OnNavigatingFrom(e);
-        }
-
-        private void ExploreDiscover_Click(
-            object sender,
-            RoutedEventArgs e)
-        {
-            Frame.Navigate(typeof(DiscoverPage));
+            if (Frame != null)
+            {
+                Frame.Navigate(typeof(DiscoverPage));
+            }
+            else
+            {
+                ViewModel.NavigateToDiscoverCommand.Execute(null);
+            }
         }
     }
 }

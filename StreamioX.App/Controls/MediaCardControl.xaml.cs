@@ -1,4 +1,4 @@
-﻿// Controls/MediaCardControl.xaml.cs
+﻿using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
 namespace StreamioX.App.Controls
@@ -7,7 +7,27 @@ namespace StreamioX.App.Controls
     {
         public MediaCardControl()
         {
-            this.InitializeComponent();
+            InitializeComponent();
+        }
+
+        private void MediaCardControl_GotFocus(
+            object sender,
+            RoutedEventArgs e)
+        {
+            CardScale.ScaleX = 1.05;
+            CardScale.ScaleY = 1.05;
+
+            GlowBorder.Visibility = Visibility.Visible;
+        }
+
+        private void MediaCardControl_LostFocus(
+            object sender,
+            RoutedEventArgs e)
+        {
+            CardScale.ScaleX = 1.0;
+            CardScale.ScaleY = 1.0;
+
+            GlowBorder.Visibility = Visibility.Collapsed;
         }
     }
 }
