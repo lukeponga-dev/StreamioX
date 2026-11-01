@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -212,23 +213,48 @@ namespace StreamioX.App.Services
             return manifestUrl.TrimEnd('/');
         }
 
+        private const string AddonStorageFileName = "installed-addons.json";
+
         private List<InstalledAddon> LoadFromSettings()
         {
+            var typeInfo = (System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<InstalledAddon>>)
+                StremioJsonContext.Default.GetTypeInfo(typeof(List<InstalledAddon>));
+
             try
             {
-                var local = ApplicationData.Current.LocalSettings;
-                if (local.Values.TryGetValue("InstalledAddons", out var raw) && raw is string json
-                    && !string.IsNullOrWhiteSpace(json))
+                // Add-on manifests can make this collection larger than the WinRT
+                // LocalSettings value limit. Keep the JSON in LocalFolder instead.
+                var filePath = Path.Combine(ApplicationData.Current.LocalFolder.Path, AddonStorageFileName);
+                if (File.Exists(filePath))
                 {
-                    return JsonSerializer.Deserialize(json,
-                               (System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<InstalledAddon>>)StremioJsonContext.Default.GetTypeInfo(typeof(List<InstalledAddon>)))
-                           ?? new List<InstalledAddon>();
+                    var fileJson = File.ReadAllText(filePath);
+                    if (!string.IsNullOrWhiteSpace(fileJson))
+                    {
+                        return JsonSerializer.Deserialize(fileJson, typeInfo) ?? new List<InstalledAddon>();
+                    }
+                }
+
+                // One-time migration from the old LocalSettings string, if present.
+                var local = ApplicationData.Current.LocalSettings;
+                if (local.Values.TryGetValue("InstalledAddons", out var raw)
+                    && raw is string legacyJson
+                    && !string.IsNullOrWhiteSpace(legacyJson))
+                {
+                    var migrated = JsonSerializer.Deserialize(legacyJson, typeInfo) ?? new List<InstalledAddon>();
+                    if (migrated.Count > 0)
+                    {
+                        var migratedJson = JsonSerializer.Serialize(migrated, typeInfo);
+                        File.WriteAllText(filePath, migratedJson);
+                    }
+
+                    return migrated;
                 }
             }
-            catch
+            catch (Exception)
             {
-                // ignore corrupt storage
+                // A corrupt or inaccessible cache should not prevent the app from starting.
             }
+
             return new List<InstalledAddon>();
         }
 
@@ -236,13 +262,15 @@ namespace StreamioX.App.Services
         {
             try
             {
-                var typeInfo = (System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<InstalledAddon>>)StremioJsonContext.Default.GetTypeInfo(typeof(List<InstalledAddon>));
+                var typeInfo = (System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<InstalledAddon>>)
+                    StremioJsonContext.Default.GetTypeInfo(typeof(List<InstalledAddon>));
                 var json = JsonSerializer.Serialize(_addons, typeInfo);
-                ApplicationData.Current.LocalSettings.Values["InstalledAddons"] = json;
+                var filePath = Path.Combine(ApplicationData.Current.LocalFolder.Path, AddonStorageFileName);
+                File.WriteAllText(filePath, json);
             }
-            catch
+            catch (Exception)
             {
-                // storage full / restricted — ignore for prototype
+                // Keep the in-memory add-on list usable if local persistence is unavailable.
             }
         }
     }
