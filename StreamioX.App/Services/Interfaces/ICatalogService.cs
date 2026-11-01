@@ -13,12 +13,13 @@ namespace StreamioX.App.Services
             string catalogId,
             CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Load catalogs from all installed catalog-providing addons for the given type.
-        /// </summary>
         Task<IReadOnlyList<Movie>> GetFromInstalledAddonsAsync(
             string type = "movie",
             string? preferredCatalogId = null,
+            CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyList<Movie>> SearchInstalledAddonsAsync(
+            string query,
             CancellationToken cancellationToken = default);
     }
 }

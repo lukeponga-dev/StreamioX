@@ -8,69 +8,55 @@ namespace StreamioX.App.Models
 {
     public sealed class AddonManifest
     {
-        [JsonPropertyName("id")]
-        public string? Id { get; set; }
-
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
-
-        [JsonPropertyName("description")]
-        public string? Description { get; set; }
-
-        [JsonPropertyName("version")]
-        public string? Version { get; set; }
-
-        [JsonPropertyName("logo")]
-        public string? Logo { get; set; }
-
-        [JsonPropertyName("types")]
-        public List<string>? Types { get; set; }
-
-        [JsonPropertyName("resources")]
-        public List<JsonElement>? Resources { get; set; }
-
-        [JsonPropertyName("catalogs")]
-        public List<CatalogDescriptor>? Catalogs { get; set; }
-
-        [JsonPropertyName("idPrefixes")]
-        public List<string>? IdPrefixes { get; set; }
+        [JsonPropertyName("id")] public string? Id { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("description")] public string? Description { get; set; }
+        [JsonPropertyName("version")] public string? Version { get; set; }
+        [JsonPropertyName("logo")] public string? Logo { get; set; }
+        [JsonPropertyName("types")] public List<string>? Types { get; set; }
+        [JsonPropertyName("resources")] public List<JsonElement>? Resources { get; set; }
+        [JsonPropertyName("catalogs")] public List<CatalogDescriptor>? Catalogs { get; set; }
+        [JsonPropertyName("idPrefixes")] public List<string>? IdPrefixes { get; set; }
 
         public IReadOnlyList<string> GetResourceNames()
         {
-            if (Resources == null || Resources.Count == 0)
-                return Array.Empty<string>();
-
+            if (Resources == null || Resources.Count == 0) return Array.Empty<string>();
             var names = new List<string>();
-            foreach (var r in Resources)
+            foreach (var resource in Resources)
             {
-                if (r.ValueKind == JsonValueKind.String)
+                if (resource.ValueKind == JsonValueKind.String)
                 {
-                    var s = r.GetString();
-                    if (!string.IsNullOrEmpty(s)) names.Add(s);
+                    var value = resource.GetString();
+                    if (!string.IsNullOrWhiteSpace(value)) names.Add(value);
                 }
-                else if (r.ValueKind == JsonValueKind.Object && r.TryGetProperty("name", out var nameProp))
+                else if (resource.ValueKind == JsonValueKind.Object &&
+                         resource.TryGetProperty("name", out var nameProperty) &&
+                         nameProperty.ValueKind == JsonValueKind.String)
                 {
-                    var s = nameProp.GetString();
-                    if (!string.IsNullOrEmpty(s)) names.Add(s);
+                    var value = nameProperty.GetString();
+                    if (!string.IsNullOrWhiteSpace(value)) names.Add(value);
                 }
             }
             return names;
         }
 
         public bool SupportsResource(string resourceName) =>
-            GetResourceNames().Any(n => string.Equals(n, resourceName, StringComparison.OrdinalIgnoreCase));
+            GetResourceNames().Any(name => string.Equals(name, resourceName, StringComparison.OrdinalIgnoreCase));
     }
 
     public sealed class CatalogDescriptor
     {
-        [JsonPropertyName("type")]
-        public string? Type { get; set; }
+        [JsonPropertyName("type")] public string? Type { get; set; }
+        [JsonPropertyName("id")] public string? Id { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("extra")] public List<CatalogExtra>? Extra { get; set; }
+    }
 
-        [JsonPropertyName("id")]
-        public string? Id { get; set; }
-
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
+    public sealed class CatalogExtra
+    {
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("isRequired")] public bool IsRequired { get; set; }
+        [JsonPropertyName("options")] public List<string>? Options { get; set; }
     }
 
     public sealed class InstalledAddon

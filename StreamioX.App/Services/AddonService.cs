@@ -158,6 +158,19 @@ namespace StreamioX.App.Services
                 .ToList();
         }
 
+        public IReadOnlyList<InstalledAddon> GetMetaProviders(string? type = null, string? contentId = null)
+        {
+            return _addons
+                .Where(a => a.Resources.Any(r => string.Equals(r, "meta", StringComparison.OrdinalIgnoreCase)))
+                .Where(a => type == null
+                            || a.Types.Count == 0
+                            || a.Types.Any(t => string.Equals(t, type, StringComparison.OrdinalIgnoreCase)))
+                .Where(a => contentId == null
+                            || a.IdPrefixes.Count == 0
+                            || a.IdPrefixes.Any(p => contentId.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+
         public IReadOnlyList<InstalledAddon> GetStreamProviders(string? type = null, string? contentId = null)
         {
             return _addons

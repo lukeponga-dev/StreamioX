@@ -1,26 +1,22 @@
-﻿<Page
+<Page
     x:Class="StreamioX.App.Views.PlayerPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d"
     Background="#05060A"
     XYFocusKeyboardNavigation="Enabled">
 
-    <Grid>
-        <!-- Native UWP MediaPlayerElement supporting HTTP, HLS, DASH, and sequential streams -->
-        <MediaPlayerElement x:Name="PlayerWidget" 
+    <Grid Background="#05060A">
+        <MediaPlayerElement x:Name="PlayerWidget"
                             AreTransportControlsEnabled="True"
+                            AutoPlay="True"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"/>
 
-        <!-- Top Title Overlay -->
         <Grid VerticalAlignment="Top" Padding="48,27,48,27" Background="#B305060A">
-            <TextBlock Text="{Binding MediaTitle}" 
-                       Foreground="#FFFFFF" 
-                       FontSize="24" 
-                       FontWeight="SemiBold"/>
+            <StackPanel Spacing="5">
+                <TextBlock Text="{Binding MediaTitle}" Foreground="#FFFFFF" FontSize="24" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding PlaybackError}" Foreground="#FFFF9B8F" FontSize="14" TextWrapping="Wrap"/>
+            </StackPanel>
         </Grid>
     </Grid>
 </Page>

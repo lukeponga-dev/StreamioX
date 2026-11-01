@@ -9,19 +9,15 @@ namespace StreamioX.App.Views
     public sealed partial class MainPage : Page
     {
         public MainViewModel ViewModel { get; }
-
         private readonly INavigationService _navigationService;
 
         public MainPage()
         {
             InitializeComponent();
-
             _navigationService = AppServices.GetRequiredService<INavigationService>();
             _navigationService.Initialize(ContentFrame);
-
             ViewModel = AppServices.GetRequiredService<MainViewModel>();
             DataContext = ViewModel;
-
             Loaded += MainPage_Loaded;
             Unloaded += MainPage_Unloaded;
         }
@@ -29,14 +25,8 @@ namespace StreamioX.App.Views
         private void MainPage_Loaded(object sender, RoutedEventArgs e)
         {
             SystemNavigationManager.GetForCurrentView().BackRequested += System_BackRequested;
-
             NavShell.SelectedItem = HomeNavItem;
-
-            if (ContentFrame.Content == null)
-            {
-                ViewModel.NavigateToHomeCommand.Execute(null);
-            }
-
+            if (ContentFrame.Content == null) ViewModel.NavigateToHomeCommand.Execute(null);
             HomeNavItem.Focus(FocusState.Programmatic);
         }
 
@@ -47,44 +37,22 @@ namespace StreamioX.App.Views
 
         private void System_BackRequested(object sender, BackRequestedEventArgs e)
         {
-            if (ContentFrame.CanGoBack)
-            {
-                e.Handled = true;
-                ContentFrame.GoBack();
-            }
+            if (ContentFrame.CanGoBack) { e.Handled = true; ContentFrame.GoBack(); }
         }
 
         private void NavShell_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
         {
-            if (args.IsSettingsInvoked)
-            {
-                ViewModel.NavigateToSettingsCommand.Execute(null);
-                return;
-            }
-
-            if (args.InvokedItemContainer?.Tag is not string tag)
-                return;
-
+            if (args.IsSettingsInvoked) { ViewModel.NavigateToSettingsCommand.Execute(null); return; }
+            if (args.InvokedItemContainer?.Tag is not string tag) return;
             switch (tag)
             {
-                case "Home":
-                    ViewModel.NavigateToHomeCommand.Execute(null);
-                    break;
-                case "Discover":
-                    ViewModel.NavigateToDiscoverCommand.Execute(null);
-                    break;
-                case "Library":
-                    ViewModel.NavigateToLibraryCommand.Execute(null);
-                    break;
-                case "Addons":
-                    ViewModel.NavigateToAddonsCommand.Execute(null);
-                    break;
-                case "Player":
-                    ViewModel.NavigateToPlayerCommand.Execute(null);
-                    break;
-                case "Diagnostic":
-                    ViewModel.NavigateToDiagnosticCommand.Execute(null);
-                    break;
+                case "Home": ViewModel.NavigateToHomeCommand.Execute(null); break;
+                case "Discover": ViewModel.NavigateToDiscoverCommand.Execute(null); break;
+                case "Search": ViewModel.NavigateToSearchCommand.Execute(null); break;
+                case "Library": ViewModel.NavigateToLibraryCommand.Execute(null); break;
+                case "Addons": ViewModel.NavigateToAddonsCommand.Execute(null); break;
+                case "Player": ViewModel.NavigateToPlayerCommand.Execute(null); break;
+                case "Diagnostic": ViewModel.NavigateToDiagnosticCommand.Execute(null); break;
             }
         }
     }

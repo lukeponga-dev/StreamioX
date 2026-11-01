@@ -38,6 +38,7 @@ namespace StreamioX.App
             services.AddSingleton<IAuthService, AuthService>();
             services.AddSingleton<IAddonService, AddonService>();
             services.AddSingleton<ICatalogService, CatalogService>();
+            services.AddSingleton<IMetadataService, MetadataService>();
             services.AddSingleton<IStreamService, StreamService>();
 
             services.AddTransient<MainViewModel>();

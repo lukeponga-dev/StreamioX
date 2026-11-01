@@ -3,14 +3,16 @@ using System.Text.Json.Serialization;
 
 namespace StreamioX.App.Models
 {
-    // All JSON contracts used by the app are registered here so NativeAOT never
-    // needs reflection-based serialization metadata.
+    // Explicit source-generated metadata keeps the app compatible with trimming/AOT.
     [JsonSourceGenerationOptions(
         PropertyNameCaseInsensitive = true,
         GenerationMode = JsonSourceGenerationMode.Metadata)]
     [JsonSerializable(typeof(CatalogResponse))]
+    [JsonSerializable(typeof(MetaResponse))]
     [JsonSerializable(typeof(Movie))]
     [JsonSerializable(typeof(Movie[]))]
+    [JsonSerializable(typeof(Video))]
+    [JsonSerializable(typeof(List<Video>))]
     [JsonSerializable(typeof(StreamResponse))]
     [JsonSerializable(typeof(StreamSource[]))]
     [JsonSerializable(typeof(AddonManifest))]
@@ -18,6 +20,8 @@ namespace StreamioX.App.Models
     [JsonSerializable(typeof(List<InstalledAddon>))]
     [JsonSerializable(typeof(CatalogDescriptor))]
     [JsonSerializable(typeof(List<CatalogDescriptor>))]
+    [JsonSerializable(typeof(CatalogExtra))]
+    [JsonSerializable(typeof(List<CatalogExtra>))]
     [JsonSerializable(typeof(List<string>))]
     [JsonSerializable(typeof(StremioUser))]
     [JsonSerializable(typeof(DeviceLinkSession))]
