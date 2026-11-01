@@ -1,7 +1,11 @@
 using System.Text.Json.Serialization;
+using WinRT;
 
 namespace StreamioX.App.Models
 {
+    /// <summary>
+    /// Represents a media item (Movie or Series) returned by a Stremio add-on catalog.
+    /// </summary>
     public class Movie
     {
         [JsonPropertyName("id")]
