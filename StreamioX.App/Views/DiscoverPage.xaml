@@ -42,7 +42,7 @@
                 Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
 
             <GridView
-                x:Name="CatalogTestControl"
+                x:Name="CatalogGrid"
                 Grid.Row="1"
                 IsItemClickEnabled="True"
                 SelectionMode="None"
