@@ -17,6 +17,13 @@ namespace StreamioX.App.Services
         private ushort? _port;
 
         public bool IsRunning => _port.HasValue;
+        public string? ServerAddress => _port.HasValue ? $"http://127.0.0.1:{_port.Value}/" : null;
+
+        public async Task<string> StartServerAsync(CancellationToken cancellationToken = default)
+        {
+            await EnsureStartedAsync(cancellationToken).ConfigureAwait(false);
+            return ServerAddress!;
+        }
 
         public async Task<string> GetStreamUrlAsync(
             StreamSource stream,
@@ -40,8 +47,8 @@ namespace StreamioX.App.Services
             if (infoHash == null)
                 throw new InvalidOperationException("This torrent source does not contain a valid BitTorrent info hash.");
 
-            var fileIndex = stream.FileIdx ?? -1;
-            if (fileIndex < -1)
+            var fileIndex = stream.FileIdx ?? 0;
+            if (fileIndex < 0)
                 throw new InvalidOperationException("The torrent source contains an invalid file index.");
 
             await EnsureStartedAsync(cancellationToken).ConfigureAwait(false);
@@ -52,13 +59,13 @@ namespace StreamioX.App.Services
                 _port!.Value,
                 $"/stream/{infoHash}/{fileIndex}");
 
-            if (trackers.Count > 0)
-            {
-                builder.Query = string.Join(
-                    "&",
-                    trackers.Select(tracker => "tr=" + Uri.EscapeDataString(tracker)));
-            }
+            var magnet = stream.Url?.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase) == true
+                ? stream.Url
+                : "magnet:?xt=urn:btih:" + infoHash
+                    + string.Concat(trackers.Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Select(tracker => "&tr=" + Uri.EscapeDataString(tracker)));
 
+            builder.Query = "magnet=" + Uri.EscapeDataString(magnet);
             return builder.Uri.AbsoluteUri;
         }
 

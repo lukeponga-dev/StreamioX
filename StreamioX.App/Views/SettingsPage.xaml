@@ -55,6 +55,37 @@
                     </StackPanel>
                 </Grid>
 
+                <TextBlock Text="Playback Server" Foreground="#A78BFA" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"/>
+                <Grid Background="#1A1B26" CornerRadius="8" Padding="24" Margin="0,0,0,32">
+                    <StackPanel>
+                        <TextBlock Text="Connect to an HTTP media server" Foreground="White" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Enter the full address of a video or stream hosted on your network or online. Example: http://192.168.1.20:8080/movies/video.mp4" Foreground="#AAA" TextWrapping="Wrap" MaxWidth="780" Margin="0,0,0,16"/>
+                        <TextBox Text="{x:Bind ViewModel.PlaybackServerAddress, Mode=TwoWay}" PlaceholderText="http://server-address:port/path/video.mp4" MinWidth="600" MaxWidth="780" HorizontalAlignment="Left" Margin="0,0,0,16"/>
+                        <Button Content="Connect &amp; Play" Command="{x:Bind ViewModel.ConnectPlaybackServerCommand}" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+                        <TextBlock Text="{x:Bind ViewModel.PlaybackServerStatus, Mode=OneWay}" Foreground="White" TextWrapping="Wrap" MaxWidth="780"/>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="Torrent HTTP Streaming" Foreground="#A78BFA" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"/>
+                <Grid Background="#1A1B26" CornerRadius="8" Padding="24" Margin="0,0,0,32">
+                    <StackPanel>
+                        <TextBlock Text="Local range server" Foreground="White" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Serves torrent files over HTTP for the Xbox media player. The local HTTP adapter handles byte-range requests (206), seeks to the requested file offset, and reads the matching data through Stremio EngineFS backed by librqbit." Foreground="#AAA" TextWrapping="Wrap" MaxWidth="780" Margin="0,0,0,16"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <Button Content="Start server" Command="{x:Bind ViewModel.StartTorrentServerCommand}" Margin="0,0,12,0"/>
+                            <Button Content="Stop server" Command="{x:Bind ViewModel.StopTorrentServerCommand}" IsEnabled="{x:Bind ViewModel.IsTorrentServerRunning, Mode=OneWay}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Status:" Foreground="#888" Width="110"/>
+                            <TextBlock Text="{x:Bind ViewModel.TorrentServerStatus, Mode=OneWay}" Foreground="White" TextWrapping="Wrap" MaxWidth="650"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Local address:" Foreground="#888" Width="110"/>
+                            <TextBlock Text="{x:Bind ViewModel.TorrentServerAddress, Mode=OneWay}" Foreground="#A78BFA"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
                 <TextBlock Text="Diagnostics" Foreground="#A78BFA" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"/>
                 <Grid Background="#1A1B26" CornerRadius="8" Padding="24" Margin="0,0,0,24">
                     <StackPanel>

@@ -7,11 +7,10 @@ namespace StreamioX.App.Services
     public interface ITorrentBridgeService
     {
         bool IsRunning { get; }
+        string? ServerAddress { get; }
 
-        Task<string> GetStreamUrlAsync(
-            StreamSource stream,
-            CancellationToken cancellationToken = default);
-
+        Task<string> StartServerAsync(CancellationToken cancellationToken = default);
+        Task<string> GetStreamUrlAsync(StreamSource stream, CancellationToken cancellationToken = default);
         Task StopAsync();
     }
 }

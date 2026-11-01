@@ -22,7 +22,7 @@ impl LibrqbitBackend {
 
         let session_opts = librqbit::SessionOptions {
             listen_port_range: Some(42000..42010),
-            enable_upnp_port_forwarding: true,
+            enable_upnp_port_forwarding: false,
             persistence: Some(librqbit::SessionPersistenceConfig::Json {
                 folder: Some(download_dir.clone()),
             }),

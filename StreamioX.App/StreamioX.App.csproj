@@ -13,7 +13,7 @@
     <DisableRuntimeMarshalling>true</DisableRuntimeMarshalling>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <BuildTorrentBridge Condition="'$(BuildTorrentBridge)' == ''">false</BuildTorrentBridge>
+    <BuildTorrentBridge Condition="'$(BuildTorrentBridge)' == ''">true</BuildTorrentBridge>
   </PropertyGroup>
   <ItemGroup>
     <Folder Include="Converters\" />

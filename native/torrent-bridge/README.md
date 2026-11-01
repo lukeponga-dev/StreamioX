@@ -1,6 +1,6 @@
 # StreamioX Xbox torrent bridge
 
-The bridge embeds the upstream Rust stream-server library in the StreamioX UWP process. It starts a loopback-only HTTP listener and exposes the upstream Stremio-compatible stream route:
+The bridge embeds Stremio's upstream EngineFS torrent engine with the librqbit backend in the StreamioX UWP process. A small Xbox-specific Axum HTTP adapter exposes the Stremio-compatible stream route and translates HTTP byte ranges into seekable reads from torrent files:
 
 `http://127.0.0.1:<dynamic-port>/stream/<infoHash>/<fileIdx>`
 

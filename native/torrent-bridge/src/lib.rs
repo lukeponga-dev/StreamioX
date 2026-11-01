@@ -1,23 +1,52 @@
 use std::{
     ffi::{CStr, CString, c_char},
+    io::SeekFrom,
     net::{Ipv4Addr, SocketAddr},
     panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
     ptr,
-    sync::{Mutex, OnceLock},
+    sync::{Mutex, OnceLock, mpsc},
+    thread::JoinHandle,
 };
 
-use stream_server::{ServerConfig, ServerHandle};
+use axum::{
+    Router,
+    body::Body,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode, header},
+    response::Response,
+    routing::get,
+};
+use enginefs::{
+    BackendEngineFS,
+    backend::{TorrentSource, TorrentHandle, priorities::PlaybackIntent, librqbit::{LibrqbitBackend, LibrqbitHandle}},
+};
+use serde::Deserialize;
+use tokio::{io::{AsyncReadExt, AsyncSeekExt}, net::TcpListener, sync::oneshot};
+use tokio_util::io::ReaderStream;
 
-static SERVER: OnceLock<Mutex<Option<ServerHandle>>> = OnceLock::new();
+type XboxEngine = BackendEngineFS<LibrqbitBackend>;
+
+#[derive(Clone)]
+struct AppState {
+    engine: std::sync::Arc<XboxEngine>,
+}
+
+struct RunningServer {
+    port: u16,
+    shutdown: Option<oneshot::Sender<()>>,
+    thread: Option<JoinHandle<()>>,
+}
+
+static SERVER: OnceLock<Mutex<Option<RunningServer>>> = OnceLock::new();
 static LAST_ERROR: OnceLock<Mutex<CString>> = OnceLock::new();
 
-fn server_slot() -> &'static Mutex<Option<ServerHandle>> {
+fn server_slot() -> &'static Mutex<Option<RunningServer>> {
     SERVER.get_or_init(|| Mutex::new(None))
 }
 
 fn error_slot() -> &'static Mutex<CString> {
-    LAST_ERROR.get_or_init(|| Mutex::new(CString::new("").expect("empty CString")))
+    LAST_ERROR.get_or_init(|| Mutex::new(CString::new("").unwrap()))
 }
 
 fn set_error(message: impl AsRef<str>) {
@@ -40,8 +69,93 @@ unsafe fn read_path(value: *const c_char, name: &str) -> Result<PathBuf, String>
     Ok(PathBuf::from(value))
 }
 
-/// Starts the embedded Stremio-compatible torrent streaming server.
-/// Returns 0 on success and writes the bound HTTP port to actual_port.
+#[derive(Deserialize)]
+struct StreamQuery {
+    magnet: Option<String>,
+}
+
+fn parse_range(headers: &HeaderMap, size: u64) -> Result<(u64, u64, bool), StatusCode> {
+    let Some(value) = headers.get(header::RANGE) else {
+        return Ok((0, size.saturating_sub(1), false));
+    };
+    let value = value.to_str().map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?;
+    let raw = value.strip_prefix("bytes=").ok_or(StatusCode::RANGE_NOT_SATISFIABLE)?;
+    let (start, end) = raw.split_once('-').ok_or(StatusCode::RANGE_NOT_SATISFIABLE)?;
+    let start: u64 = start.parse().map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?;
+    let end = if end.is_empty() { size.saturating_sub(1) } else {
+        end.parse::<u64>().map_err(|_| StatusCode::RANGE_NOT_SATISFIABLE)?.min(size.saturating_sub(1))
+    };
+    if size == 0 || start >= size || end < start {
+        return Err(StatusCode::RANGE_NOT_SATISFIABLE);
+    }
+    Ok((start, end, true))
+}
+
+async fn stream_file(
+    State(state): State<AppState>,
+    Path((hash, file_idx)): Path<(String, usize)>,
+    Query(query): Query<StreamQuery>,
+    headers: HeaderMap,
+    method: axum::http::Method,
+) -> Result<Response, StatusCode> {
+    let engine = match state.engine.get_engine(&hash).await {
+        Some(engine) => engine,
+        None => {
+            let magnet = query.magnet.ok_or(StatusCode::NOT_FOUND)?;
+            let added = state.engine.add_torrent(TorrentSource::Url(magnet), None)
+                .await.map_err(|_| StatusCode::BAD_GATEWAY)?;
+            if !added.info_hash.eq_ignore_ascii_case(&hash) {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            added
+        }
+    };
+
+    let files = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let files = engine.handle.get_files().await;
+            if !files.is_empty() {
+                break files;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        }
+    }).await.map_err(|_| StatusCode::GATEWAY_TIMEOUT)?;
+    let file = files.get(file_idx).ok_or(StatusCode::NOT_FOUND)?;
+    let size = file.length;
+    let (start, end, partial) = parse_range(&headers, size)?;
+    let length = if size == 0 { 0 } else { end - start + 1 };
+
+    let mut response = Response::builder()
+        .status(if partial { StatusCode::PARTIAL_CONTENT } else { StatusCode::OK })
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::CONTENT_LENGTH, length.to_string())
+        .header(header::CONTENT_TYPE, "video/mp4");
+
+    if partial {
+        response = response.header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{size}"));
+    }
+
+    if method == axum::http::Method::HEAD {
+        return response.body(Body::empty()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let intent = if start == 0 { PlaybackIntent::DirectInitial } else { PlaybackIntent::DirectSeek };
+    let mut reader = engine.get_file_with_intent(file_idx, start, 128, intent)
+        .await.ok_or(StatusCode::BAD_GATEWAY)?;
+    reader.seek(SeekFrom::Start(start)).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let bounded = reader.take(length);
+    let body = Body::from_stream(ReaderStream::new(bounded));
+    response.body(body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+fn app(state: AppState) -> Router {
+    Router::new()
+        .route("/heartbeat", get(|| async { "ok" }))
+        .route("/stream/{hash}/{file_idx}", get(stream_file).head(stream_file))
+        .with_state(state)
+}
+
+/// Starts the in-process librqbit torrent engine and HTTP byte-range server.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn streamio_torrent_bridge_start(
     config_dir: *const c_char,
@@ -50,107 +164,87 @@ pub unsafe extern "C" fn streamio_torrent_bridge_start(
     actual_port: *mut u16,
 ) -> i32 {
     let result = catch_unwind(AssertUnwindSafe(|| -> Result<u16, String> {
-        if actual_port.is_null() {
-            return Err("Output port pointer was null".to_string());
-        }
+        if actual_port.is_null() { return Err("Output port pointer was null".into()); }
         let config_dir = unsafe { read_path(config_dir, "Config") }?;
         let cache_dir = unsafe { read_path(cache_dir, "Cache") }?;
+        std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
 
-        let mut server = server_slot()
-            .lock()
-            .map_err(|_| "Torrent server lock was poisoned".to_string())?;
+        let mut slot = server_slot().lock().map_err(|_| "Torrent server lock was poisoned".to_string())?;
+        if let Some(server) = slot.as_ref() { return Ok(server.port); }
 
-        if let Some(handle) = server.as_ref() {
-            return Ok(handle.bound_http_addr().port());
-        }
+        let (ready_tx, ready_rx) = mpsc::sync_channel::<Result<u16, String>>(1);
+        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let thread = std::thread::Builder::new().name("streamiox-torrent".into()).spawn(move || {
+            let runtime = match tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build() {
+                Ok(runtime) => runtime,
+                Err(error) => { let _ = ready_tx.send(Err(format!("Tokio runtime: {error}"))); return; }
+            };
+            runtime.block_on(async move {
+                let (backend, restored): (LibrqbitBackend, std::collections::HashMap<String, LibrqbitHandle>) =
+                    match LibrqbitBackend::new(cache_dir.join("downloads")).await {
+                        Ok(value) => value,
+                        Err(error) => { let _ = ready_tx.send(Err(format!("librqbit init: {error:#}"))); return; }
+                    };
+                let engine = std::sync::Arc::new(XboxEngine::new_with_backend(
+                    backend, restored, cache_dir.join("piece-cache"), cache_dir.join("downloads")
+                ));
+                let address = SocketAddr::from((Ipv4Addr::LOCALHOST, requested_port));
+                let listener = match TcpListener::bind(address).await {
+                    Ok(listener) => listener,
+                    Err(error) => { let _ = ready_tx.send(Err(format!("HTTP bind: {error}"))); return; }
+                };
+                let port = match listener.local_addr() {
+                    Ok(addr) => addr.port(),
+                    Err(error) => { let _ = ready_tx.send(Err(error.to_string())); return; }
+                };
+                let _ = ready_tx.send(Ok(port));
+                let _ = axum::serve(listener, app(AppState { engine }))
+                    .with_graceful_shutdown(async { let _ = shutdown_rx.await; })
+                    .await;
+            });
+        }).map_err(|e| format!("Could not start torrent thread: {e}"))?;
 
-        let mut config = ServerConfig::embedded();
-        config.http_addr = SocketAddr::from((Ipv4Addr::LOCALHOST, requested_port));
-        config.config_dir = Some(config_dir);
-        config.cache_dir = Some(cache_dir);
-        config.init_logging = false;
-        config.manage_process_globals = false;
-        config.setup_ffmpeg = false;
-        config.listen_for_ctrl_c = false;
-        config.print_startup = false;
-        config.exit_process_on_shutdown_timeout = false;
-        config.enable_update_exit = false;
-        config.enable_cache_cleaner = true;
-        config.enable_memory_sampler = false;
-        config.enable_ssdp_discovery = false;
-        config.enable_background_update_checker = false;
-        config.enable_local_addon_scan = false;
-
-        let handle = stream_server::start(config)
-            .map_err(|error| format!("Could not start torrent engine: {error:#}"))?;
-        let port = handle.bound_http_addr().port();
-        *server = Some(handle);
+        let port = ready_rx.recv().map_err(|e| e.to_string())?
+            .map_err(|e| { let _ = thread.thread().id(); e })?;
+        *slot = Some(RunningServer { port, shutdown: Some(shutdown_tx), thread: Some(thread) });
         Ok(port)
     }));
 
     match result {
-        Ok(Ok(port)) => {
-            unsafe { *actual_port = port };
-            set_error("");
-            0
-        }
-        Ok(Err(error)) => {
-            set_error(error);
-            -1
-        }
-        Err(_) => {
-            set_error("Torrent engine panicked while starting");
-            -2
-        }
+        Ok(Ok(port)) => { unsafe { *actual_port = port }; set_error(""); 0 }
+        Ok(Err(error)) => { set_error(error); -1 }
+        Err(_) => { set_error("Torrent engine panicked while starting"); -2 }
     }
 }
 
-/// Stops the embedded torrent server and waits for its shutdown.
 #[unsafe(no_mangle)]
 pub extern "C" fn streamio_torrent_bridge_stop() -> i32 {
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let handle = match server_slot().lock() {
+        let server = match server_slot().lock() {
             Ok(mut slot) => slot.take(),
-            Err(_) => {
-                set_error("Torrent server lock was poisoned");
-                return -1;
-            }
+            Err(_) => { set_error("Torrent server lock was poisoned"); return -1; }
         };
-
-        if let Some(handle) = handle {
-            if let Err(error) = handle.shutdown() {
-                set_error(format!("Could not signal torrent server shutdown: {error:#}"));
-                return -1;
-            }
-            if let Err(error) = handle.join() {
-                set_error(format!("Torrent server shutdown failed: {error:#}"));
-                return -1;
+        if let Some(mut server) = server {
+            if let Some(shutdown) = server.shutdown.take() { let _ = shutdown.send(()); }
+            if let Some(thread) = server.thread.take() {
+                if thread.join().is_err() { set_error("Torrent HTTP server thread panicked"); return -1; }
             }
         }
         0
     }));
-
     match result {
         Ok(code) => code,
-        Err(_) => {
-            set_error("Torrent engine panicked while stopping");
-            -2
-        }
+        Err(_) => { set_error("Torrent engine panicked while stopping"); -2 }
     }
 }
 
-/// Copies the latest error into a caller-owned UTF-8 buffer.
-/// Returns the full message length excluding the null terminator.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn streamio_torrent_bridge_last_error(
-    buffer: *mut u8,
-    capacity: usize,
-) -> usize {
+pub unsafe extern "C" fn streamio_torrent_bridge_last_error(buffer: *mut u8, capacity: usize) -> usize {
     let message = match error_slot().lock() {
         Ok(value) => value.as_bytes().to_vec(),
         Err(_) => b"Could not read torrent bridge error".to_vec(),
     };
-
     if !buffer.is_null() && capacity > 0 {
         let copied = message.len().min(capacity - 1);
         unsafe {
