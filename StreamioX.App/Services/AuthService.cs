@@ -18,7 +18,8 @@ namespace StreamioX.App.Services
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
-            PropertyNameCaseInsensitive = true
+            PropertyNameCaseInsensitive = true,
+            TypeInfoResolver = StremioJsonContext.Default
         };
 
         private readonly HttpClient _http;
@@ -46,7 +47,7 @@ namespace StreamioX.App.Services
                 if (settings.TryGetValue(UserSetting, out var userObj) && userObj is string userJson
                     && !string.IsNullOrWhiteSpace(userJson))
                 {
-                    User = JsonSerializer.Deserialize<StremioUser>(userJson, JsonOptions);
+                    User = JsonSerializer.Deserialize(userJson, StremioJsonContext.Default.StremioUser);
                 }
             }
             catch
@@ -63,8 +64,8 @@ namespace StreamioX.App.Services
             response.EnsureSuccessStatusCode();
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            var envelope = await JsonSerializer.DeserializeAsync<StremioApiEnvelope<DeviceLinkCreateResult>>(
-                stream, JsonOptions, cancellationToken).ConfigureAwait(false);
+            var envelopeTypeInfo = (System.Text.Json.Serialization.Metadata.JsonTypeInfo<StremioApiEnvelope<DeviceLinkCreateResult>>)StremioJsonContext.Default.GetTypeInfo(typeof(StremioApiEnvelope<DeviceLinkCreateResult>));
+            var envelope = await JsonSerializer.DeserializeAsync(stream, envelopeTypeInfo, cancellationToken).ConfigureAwait(false);
 
             if (envelope?.Error != null)
                 throw new InvalidOperationException(envelope.Error.Message ?? "Failed to create link code");
@@ -113,13 +114,13 @@ namespace StreamioX.App.Services
                 // result may be the auth payload or nested
                 authKey = TryGetString(resultEl, "authKey");
                 if (resultEl.TryGetProperty("user", out var userEl))
-                    user = JsonSerializer.Deserialize<StremioUser>(userEl.GetRawText(), JsonOptions);
+                    user = JsonSerializer.Deserialize(userEl.GetRawText(), StremioJsonContext.Default.StremioUser);
 
                 if (authKey == null && resultEl.TryGetProperty("result", out var nested))
                 {
                     authKey = TryGetString(nested, "authKey");
                     if (nested.TryGetProperty("user", out var nestedUser))
-                        user = JsonSerializer.Deserialize<StremioUser>(nestedUser.GetRawText(), JsonOptions);
+                        user = JsonSerializer.Deserialize(nestedUser.GetRawText(), StremioJsonContext.Default.StremioUser);
                 }
 
                 // Sometimes authKey is the whole result as string? unlikely
@@ -146,12 +147,12 @@ namespace StreamioX.App.Services
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
                 throw new ArgumentException("Email and password are required.");
 
-            var payload = new
+            var payload = new StremioApiRequest
             {
-                type = "Login",
-                email,
-                password,
-                facebook = false
+                Type = "Login",
+                Email = email,
+                Password = password,
+                Facebook = false
             };
 
             var result = await PostApiAsync<LoginResult>("login", payload, cancellationToken).ConfigureAwait(false);
@@ -179,7 +180,7 @@ namespace StreamioX.App.Services
             {
                 try
                 {
-                    await PostApiAsync<object>("logout", new { type = "Logout", authKey = AuthKey }, cancellationToken)
+                    await PostApiAsync<object>("logout", new StremioApiRequest { Type = "Logout", AuthKey = AuthKey }, cancellationToken)
                         .ConfigureAwait(false);
                 }
                 catch
@@ -198,7 +199,7 @@ namespace StreamioX.App.Services
             if (string.IsNullOrWhiteSpace(AuthKey))
                 return;
 
-            var user = await PostApiAsync<StremioUser>("getUser", new { type = "GetUser", authKey = AuthKey }, cancellationToken)
+            var user = await PostApiAsync<StremioUser>("getUser", new StremioApiRequest { Type = "GetUser", AuthKey = AuthKey }, cancellationToken)
                 .ConfigureAwait(false);
             if (user != null)
             {
@@ -207,16 +208,19 @@ namespace StreamioX.App.Services
             }
         }
 
-        private async Task<T?> PostApiAsync<T>(string method, object body, CancellationToken cancellationToken)
+        private async Task<T?> PostApiAsync<T>(string method, StremioApiRequest body, CancellationToken cancellationToken)
         {
-            var json = JsonSerializer.Serialize(body, JsonOptions);
+            var json = JsonSerializer.Serialize(body, StremioJsonContext.Default.StremioApiRequest);
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var response = await _http.PostAsync(ApiBase + method, content, cancellationToken)
                 .ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            var envelope = await JsonSerializer.DeserializeAsync<StremioApiEnvelope<T>>(stream, JsonOptions, cancellationToken)
+            var envelopeTypeInfo = StremioJsonContext.Default.GetTypeInfo(typeof(StremioApiEnvelope<T>))
+                as System.Text.Json.Serialization.Metadata.JsonTypeInfo<StremioApiEnvelope<T>>
+                ?? throw new NotSupportedException($"No source-generated API response metadata registered for {typeof(T).FullName}.");
+            var envelope = await JsonSerializer.DeserializeAsync(stream, envelopeTypeInfo, cancellationToken)
                 .ConfigureAwait(false);
 
             if (envelope?.Error != null)
@@ -234,7 +238,7 @@ namespace StreamioX.App.Services
                 settings.Remove(AuthKeySetting);
 
             if (User != null)
-                settings[UserSetting] = JsonSerializer.Serialize(User, JsonOptions);
+                settings[UserSetting] = JsonSerializer.Serialize(User, StremioJsonContext.Default.StremioUser);
             else
                 settings.Remove(UserSetting);
         }

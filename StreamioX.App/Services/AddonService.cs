@@ -16,12 +16,14 @@ namespace StreamioX.App.Services
         private static readonly JsonSerializerOptions StorageJson = new()
         {
             PropertyNameCaseInsensitive = true,
-            WriteIndented = false
+            WriteIndented = false,
+            TypeInfoResolver = StremioJsonContext.Default
         };
 
         private readonly StremioClient _client;
         private readonly List<InstalledAddon> _addons = new();
         private bool _initialized;
+        private readonly SemaphoreSlim _initializeLock = new(1, 1);
 
         public IReadOnlyList<InstalledAddon> InstalledAddons => _addons;
 
@@ -32,34 +34,42 @@ namespace StreamioX.App.Services
 
         public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
-            if (_initialized) return;
+            // App startup and page navigation can request initialization at the same time.
+            // Serialize initialization so the installed add-on list is never cleared or
+            // modified while a catalog request is enumerating it.
+            await _initializeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_initialized) return;
 
-            _addons.Clear();
-            var stored = LoadFromSettings();
-            if (stored.Count > 0)
-            {
-                _addons.AddRange(stored);
-            }
-            else
-            {
-                // First run: install official Cinemeta
-                var cinemeta = await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken)
+                _addons.Clear();
+                var stored = LoadFromSettings();
+                if (stored.Count > 0)
+                {
+                    _addons.AddRange(stored);
+                }
+                else
+                {
+                    // First run: install official Cinemeta
+                    var cinemeta = await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (cinemeta != null)
+                        cinemeta.IsOfficial = true;
+                }
+
+                // Ensure Cinemeta is present and refresh its manifest on each app start.
+                // Stored manifests can become stale and no longer describe valid catalogs.
+                var refreshedCinemeta = await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken)
                     .ConfigureAwait(false);
-                if (cinemeta != null)
-                    cinemeta.IsOfficial = true;
-            }
+                if (refreshedCinemeta != null)
+                    refreshedCinemeta.IsOfficial = true;
 
-            // Ensure Cinemeta is present
-            if (!_addons.Any(a => a.Id.Contains("cinemeta", StringComparison.OrdinalIgnoreCase)
-                                  || a.BaseUrl.Contains("cinemeta", StringComparison.OrdinalIgnoreCase)))
+                _initialized = true;
+            }
+            finally
             {
-                var cinemeta = await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken)
-                    .ConfigureAwait(false);
-                if (cinemeta != null)
-                    cinemeta.IsOfficial = true;
+                _initializeLock.Release();
             }
-
-            _initialized = true;
         }
 
         public async Task<InstalledAddon?> InstallFromManifestUrlAsync(
@@ -81,7 +91,23 @@ namespace StreamioX.App.Services
             var existing = _addons.FirstOrDefault(a =>
                 string.Equals(a.Id, manifest.Id, StringComparison.OrdinalIgnoreCase));
             if (existing != null)
+            {
+                // Refresh cached manifest metadata so changed catalog IDs/resources do not
+                // leave the app with a stale provider definition.
+                existing.ManifestUrl = manifestUrl;
+                existing.BaseUrl = GetBaseUrl(manifestUrl);
+                existing.Name = manifest.Name ?? manifest.Id!;
+                existing.Description = manifest.Description;
+                existing.Version = manifest.Version;
+                existing.Logo = manifest.Logo;
+                existing.Types = manifest.Types?.ToList() ?? new List<string>();
+                existing.Resources = manifest.GetResourceNames().ToList();
+                existing.Catalogs = manifest.Catalogs?.ToList() ?? new List<CatalogDescriptor>();
+                existing.IdPrefixes = manifest.IdPrefixes?.ToList() ?? new List<string>();
+                existing.IsOfficial = manifestUrl.Contains("cinemeta", StringComparison.OrdinalIgnoreCase);
+                SaveToSettings();
                 return existing;
+            }
 
             var baseUrl = GetBaseUrl(manifestUrl);
             var addon = new InstalledAddon
@@ -181,7 +207,8 @@ namespace StreamioX.App.Services
                 if (local.Values.TryGetValue("InstalledAddons", out var raw) && raw is string json
                     && !string.IsNullOrWhiteSpace(json))
                 {
-                    return JsonSerializer.Deserialize<List<InstalledAddon>>(json, StorageJson)
+                    return JsonSerializer.Deserialize(json,
+                               (System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<InstalledAddon>>)StremioJsonContext.Default.GetTypeInfo(typeof(List<InstalledAddon>)))
                            ?? new List<InstalledAddon>();
                 }
             }
@@ -196,7 +223,8 @@ namespace StreamioX.App.Services
         {
             try
             {
-                var json = JsonSerializer.Serialize(_addons, StorageJson);
+                var typeInfo = (System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<InstalledAddon>>)StremioJsonContext.Default.GetTypeInfo(typeof(List<InstalledAddon>));
+                var json = JsonSerializer.Serialize(_addons, typeInfo);
                 ApplicationData.Current.LocalSettings.Values["InstalledAddons"] = json;
             }
             catch

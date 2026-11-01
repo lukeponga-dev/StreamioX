@@ -1,6 +1,8 @@
 using System;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
+using StreamioX.App.Models;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,7 +15,8 @@ namespace StreamioX.App.Services
     {
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
-            PropertyNameCaseInsensitive = true
+            PropertyNameCaseInsensitive = true,
+            TypeInfoResolver = StremioJsonContext.Default
         };
 
         private readonly HttpClient _httpClient;
@@ -34,7 +37,9 @@ namespace StreamioX.App.Services
             response.EnsureSuccessStatusCode();
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
+            var typeInfo = StremioJsonContext.Default.GetTypeInfo(typeof(T)) as JsonTypeInfo<T>
+                ?? throw new NotSupportedException($"No source-generated JSON metadata registered for {typeof(T).FullName}.");
+            return await JsonSerializer.DeserializeAsync(stream, typeInfo, cancellationToken).ConfigureAwait(false);
         }
     }
 }

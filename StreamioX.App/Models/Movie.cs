@@ -1,12 +1,16 @@
 using System.Text.Json.Serialization;
 using WinRT;
 
+// WinUI/UWP XAML binding needs WinRT custom-property metadata for CLR models.
+
+
 namespace StreamioX.App.Models
 {
     /// <summary>
     /// Represents a media item (Movie or Series) returned by a Stremio add-on catalog.
     /// </summary>
-    public class Movie
+    [GeneratedBindableCustomProperty]
+    public partial class Movie
     {
         [JsonPropertyName("id")]
         public string? Id { get; set; }

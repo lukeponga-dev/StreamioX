@@ -51,8 +51,10 @@ namespace StreamioX.App.Services
 
             var results = new List<Movie>();
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var providerErrors = new List<string>();
+            var providers = _addonService.GetCatalogProviders(type);
 
-            foreach (var addon in _addonService.GetCatalogProviders(type))
+            foreach (var addon in providers)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -83,10 +85,25 @@ namespace StreamioX.App.Services
                 {
                     throw;
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // A single unavailable add-on should not prevent other catalogs from loading.
+                    // Continue through other providers, but preserve the reason if all fail.
+                    providerErrors.Add($"{addon.Name}: {ex.Message}");
                 }
+            }
+
+            if (results.Count == 0)
+            {
+                if (providers.Count == 0)
+                    throw new InvalidOperationException(
+                        $"No installed add-on exposes a {type} catalog. Check the Add-ons page.");
+
+                if (providerErrors.Count > 0)
+                    throw new InvalidOperationException(
+                        "Catalog providers returned no results. " + string.Join(" | ", providerErrors));
+
+                throw new InvalidOperationException(
+                    $"Installed catalog providers did not return any {type} items.");
             }
 
             return results;
