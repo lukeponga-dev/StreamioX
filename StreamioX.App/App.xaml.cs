@@ -55,10 +55,21 @@ namespace StreamioX.App
             throw new Exception("Failed to load Page " + e.SourcePageType.FullName);
         }
 
-        private void OnSuspending(object sender, SuspendingEventArgs e)
+        private async void OnSuspending(object sender, SuspendingEventArgs e)
         {
             var deferral = e.SuspendingOperation.GetDeferral();
-            deferral.Complete();
+            try
+            {
+                await AppServices.GetRequiredService<ITorrentBridgeService>().StopAsync();
+            }
+            catch
+            {
+                // The app is suspending; native server cleanup is best-effort.
+            }
+            finally
+            {
+                deferral.Complete();
+            }
         }
     }
 }

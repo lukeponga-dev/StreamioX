@@ -40,6 +40,7 @@ namespace StreamioX.App
             services.AddSingleton<ICatalogService, CatalogService>();
             services.AddSingleton<IMetadataService, MetadataService>();
             services.AddSingleton<IStreamService, StreamService>();
+            services.AddSingleton<ITorrentBridgeService, TorrentBridgeService>();
 
             services.AddTransient<MainViewModel>();
             services.AddTransient<DiscoverViewModel>();

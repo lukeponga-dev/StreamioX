@@ -17,7 +17,7 @@ namespace StreamioX.App.ViewModels
         private readonly IMetadataService _metadataService;
         private readonly INavigationService _navigationService;
         private readonly IAddonService _addonService;
-        private const string TestAddonUrl = "https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json";
+        private readonly ITorrentBridgeService _torrentBridgeService;
 
         private CancellationTokenSource? _loadCts;
         private CancellationTokenSource? _streamsCts;
@@ -46,12 +46,14 @@ namespace StreamioX.App.ViewModels
             IStreamService streamService,
             IMetadataService metadataService,
             INavigationService navigationService,
-            IAddonService addonService)
+            IAddonService addonService,
+            ITorrentBridgeService torrentBridgeService)
         {
             _streamService = streamService ?? throw new ArgumentNullException(nameof(streamService));
             _metadataService = metadataService ?? throw new ArgumentNullException(nameof(metadataService));
             _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
             _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
+            _torrentBridgeService = torrentBridgeService ?? throw new ArgumentNullException(nameof(torrentBridgeService));
         }
 
         public async Task InitializeAsync(Movie movie)
@@ -75,11 +77,6 @@ namespace StreamioX.App.ViewModels
             try
             {
                 await _addonService.InitializeAsync(token).ConfigureAwait(true);
-
-                // Test provider: official Stremio Public Domain Movies add-on.
-                // Its manifest advertises movie streams and IMDb ID support.
-                await _addonService.InstallFromManifestUrlAsync(TestAddonUrl, token)
-                    .ConfigureAwait(true);
 
                 // Catalog results are previews. Resolve the full Stremio meta object
                 // before presenting the detail view or requesting episode streams.
@@ -173,10 +170,41 @@ namespace StreamioX.App.ViewModels
         }
 
         [RelayCommand]
-        private void PlayStream(StreamSource? stream)
+        private async Task PlayStreamAsync(StreamSource? stream)
         {
-            if (stream == null || string.IsNullOrWhiteSpace(stream.Url)) return;
-            _navigationService.NavigateTo(NavigationRoute.Player, stream.Url);
+            if (stream == null)
+                return;
+
+            if (Uri.TryCreate(stream.Url, UriKind.Absolute, out var directUri)
+                && (directUri.Scheme == Uri.UriSchemeHttp || directUri.Scheme == Uri.UriSchemeHttps))
+            {
+                _navigationService.NavigateTo(NavigationRoute.Player, directUri.AbsoluteUri);
+                return;
+            }
+
+            var isMagnetLink = Uri.TryCreate(stream.Url, UriKind.Absolute, out var magnetUri)
+                && string.Equals(magnetUri.Scheme, "magnet", StringComparison.OrdinalIgnoreCase);
+
+            if (string.IsNullOrWhiteSpace(stream.InfoHash) && !isMagnetLink)
+            {
+                ErrorMessage = "This source has no playable URL or torrent info hash.";
+                return;
+            }
+
+            try
+            {
+                ErrorMessage = "Starting the torrent engine and preparing the stream...";
+                var streamUrl = await _torrentBridgeService
+                    .GetStreamUrlAsync(stream, CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                ErrorMessage = null;
+                _navigationService.NavigateTo(NavigationRoute.Player, streamUrl);
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Unable to start torrent playback: {ex.Message}";
+            }
         }
     }
 }

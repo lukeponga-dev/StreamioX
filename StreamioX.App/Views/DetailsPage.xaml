@@ -69,6 +69,7 @@
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Bold" FontSize="16"/>
                                     <TextBlock Text="{Binding Title}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding SourceKind}" Foreground="{StaticResource FocusAccentBrush}" FontSize="12"/>
                                 </StackPanel>
                             </Button>
                         </DataTemplate>

@@ -1,0 +1,17 @@
+[package]
+name = "streamio-x-torrent-bridge"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+name = "streamio_torrent_bridge"
+crate-type = ["cdylib"]
+
+[dependencies]
+stream-server = { package = "server", path = "../stream-server/server", default-features = false, features = ["librqbit"] }
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

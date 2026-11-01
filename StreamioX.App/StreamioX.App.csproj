@@ -11,11 +11,23 @@
     <PublishAot>true</PublishAot>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <DisableRuntimeMarshalling>true</DisableRuntimeMarshalling>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <BuildTorrentBridge Condition="'$(BuildTorrentBridge)' == ''">false</BuildTorrentBridge>
   </PropertyGroup>
   <ItemGroup>
     <Folder Include="Converters\" />
   </ItemGroup>
+  <ItemGroup Condition="'$(Platform)' == 'x64' and '$(BuildTorrentBridge)' != 'false'">
+    <Content Include="..\native\torrent-bridge\target\x86_64-uwp-windows-msvc\release\streamio_torrent_bridge.dll"
+             Link="streamio_torrent_bridge.dll"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="BuildTorrentBridge" BeforeTargets="PrepareForBuild" Condition="'$(Platform)' == 'x64' and '$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true' and '$(BuildTorrentBridge)' != 'false'">
+    <Exec Command="cargo +nightly build -Z build-std=std,panic_abort --manifest-path &quot;$(MSBuildProjectDirectory)\..\native\torrent-bridge\Cargo.toml&quot; --target x86_64-uwp-windows-msvc --release" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />

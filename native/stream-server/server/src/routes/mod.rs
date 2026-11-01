@@ -1,0 +1,27 @@
+pub mod compat;
+pub mod engine;
+pub mod stream;
+pub mod system;
+
+#[cfg(not(target_vendor = "uwp"))]
+pub mod archive;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod casting;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod downloader;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod ftp;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod hls;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod nzb;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod peers;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod proxy;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod subtitles;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod update;
+#[cfg(not(target_vendor = "uwp"))]
+pub mod youtube;
