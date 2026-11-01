@@ -1,0 +1,3094 @@
+From 4b4b0aaf01395514ff03de39dc932795c92ec2bf Mon Sep 17 00:00:00 2001
+From: lukeponga-dev <lukeponga-dev@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 01:36:30 +0000
+Subject: [PATCH 1/3] Refactor: introduce DI, fix HttpClient, add cancellation
+ and error handling
+
+- Add Microsoft.Extensions.DependencyInjection + Http
+- Centralize service registration in AppServices
+- Use typed HttpClient for StremioClient (no socket exhaustion)
+- Propagate exceptions instead of silent failure
+- Add CancellationToken support to catalog/stream calls
+- Remove custom ViewModelBase (use CommunityToolkit ObservableObject)
+- Wire all pages/ViewModels through DI
+- Improve nullability annotations on models
+---
+ StreamioX.App/App.xaml.cs                     | 25 ++-----
+ StreamioX.App/AppServices.cs                  | 50 ++++++++++++++
+ StreamioX.App/Models/Movie.cs                 | 23 +++----
+ StreamioX.App/Models/StreamSource.cs          | 17 ++---
+ StreamioX.App/Services/CatalogService.cs      | 25 ++++---
+ .../Services/Interfaces/ICatalogService.cs    | 19 ++----
+ .../Services/Interfaces/IStreamService.cs     | 14 ++--
+ StreamioX.App/Services/StreamService.cs       | 23 ++++---
+ StreamioX.App/Services/StremioClient.cs       | 42 ++++++------
+ StreamioX.App/StreamioX.App.csproj            |  4 +-
+ StreamioX.App/ViewModels/DetailsViewModel.cs  | 45 ++++++++-----
+ StreamioX.App/ViewModels/DiscoverViewModel.cs | 52 +++++++-------
+ StreamioX.App/ViewModels/MainViewModel.cs     | 67 +++----------------
+ StreamioX.App/ViewModels/PlayerViewModel.cs   | 14 +---
+ StreamioX.App/ViewModels/SettingsViewModel.cs | 17 ++---
+ StreamioX.App/ViewModels/ViewModelBase.cs     | 44 ------------
+ StreamioX.App/Views/DetailsPage.xaml.cs       | 18 ++---
+ StreamioX.App/Views/DiscoverPage.xaml.cs      | 18 ++---
+ StreamioX.App/Views/HomePage.xaml.cs          | 12 ++--
+ StreamioX.App/Views/LibraryPage.xaml.cs       | 10 +--
+ StreamioX.App/Views/MainPage.xaml.cs          | 29 +++-----
+ StreamioX.App/Views/PlayerPage.xaml.cs        | 17 ++---
+ StreamioX.App/Views/SettingsPage.xaml.cs      | 10 +--
+ 23 files changed, 247 insertions(+), 348 deletions(-)
+ create mode 100644 StreamioX.App/AppServices.cs
+ delete mode 100644 StreamioX.App/ViewModels/ViewModelBase.cs
+
+diff --git a/StreamioX.App/App.xaml.cs b/StreamioX.App/App.xaml.cs
+index 5ef9142..899b352 100644
+--- a/StreamioX.App/App.xaml.cs
++++ b/StreamioX.App/App.xaml.cs
+@@ -1,4 +1,4 @@
+-﻿using StreamioX.App.Views; // Ensure this matches your namespace
++using StreamioX.App.Views;
+ using System;
+ using Windows.ApplicationModel;
+ using Windows.ApplicationModel.Activation;
+@@ -8,36 +8,25 @@ using Windows.UI.Xaml.Navigation;
+ 
+ namespace StreamioX.App
+ {
+-    /// <summary>
+-    /// Provides application-specific behavior to supplement the default Application class.
+-    /// </summary>
+     sealed partial class App : Application
+     {
+         public App()
+         {
+             this.InitializeComponent();
+ 
+-            // use directional navigation for Xbox insead of mouse/keyboard
+-            this.RequiresPointerMode =
+-                ApplicationRequiresPointerMode.WhenRequested;
+-
++            this.RequiresPointerMode = ApplicationRequiresPointerMode.WhenRequested;
+             this.Suspending += OnSuspending;
++
++            AppServices.Configure();
+         }
+ 
+-        /// <summary>
+-        /// Invoked when the application is launched normally by the end user.
+-        /// </summary>
+         protected override void OnLaunched(LaunchActivatedEventArgs e)
+         {
+             Frame rootFrame = Window.Current.Content as Frame;
+ 
+-            // Do not repeat app initialization when the Window already has content,
+-            // just ensure that the window is active
+             if (rootFrame == null)
+             {
+-                // Create a Frame to act as the navigation context and navigate to the first page
+                 rootFrame = new Frame();
+-
+                 rootFrame.NavigationFailed += OnNavigationFailed;
+ 
+                 if (e.PreviousExecutionState == ApplicationExecutionState.Terminated)
+@@ -45,18 +34,14 @@ namespace StreamioX.App
+                     // TODO: Load state from previously suspended application
+                 }
+ 
+-                // Place the frame in the current Window
+                 Window.Current.Content = rootFrame;
+             }
+ 
+             if (rootFrame.Content == null)
+             {
+-                // When the navigation stack isn't restored navigate to the first page,
+-                // configuring the new page by passing required information as a navigation parameter
+                 rootFrame.Navigate(typeof(MainPage), e.Arguments);
+             }
+ 
+-            // Ensure the current window is active
+             Window.Current.Activate();
+         }
+ 
+@@ -72,4 +57,4 @@ namespace StreamioX.App
+             deferral.Complete();
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/AppServices.cs b/StreamioX.App/AppServices.cs
+new file mode 100644
+index 0000000..307803f
+--- /dev/null
++++ b/StreamioX.App/AppServices.cs
+@@ -0,0 +1,50 @@
++using Microsoft.Extensions.DependencyInjection;
++using StreamioX.App.Navigation;
++using StreamioX.App.Services;
++using StreamioX.App.ViewModels;
++using System;
++using System.Net.Http;
++
++namespace StreamioX.App
++{
++    public static class AppServices
++    {
++        private static IServiceProvider? _provider;
++
++        public static IServiceProvider Provider =>
++            _provider ?? throw new InvalidOperationException("Services not configured. Call Configure() first.");
++
++        public static void Configure()
++        {
++            if (_provider != null) return;
++
++            var services = new ServiceCollection();
++
++            services.AddHttpClient<StremioClient>(client =>
++            {
++                client.Timeout = TimeSpan.FromSeconds(30);
++                client.DefaultRequestHeaders.UserAgent.ParseAdd("StreamioX/1.0");
++            });
++
++            services.AddSingleton<INavigationService, NavigationService>();
++            services.AddSingleton<ICatalogService, CatalogService>();
++            services.AddSingleton<IStreamService, StreamService>();
++
++            services.AddTransient<MainViewModel>();
++            services.AddTransient<DiscoverViewModel>();
++            services.AddTransient<DetailsViewModel>();
++            services.AddTransient<HomeViewModel>();
++            services.AddTransient<PlayerViewModel>();
++            services.AddTransient<SettingsViewModel>();
++            services.AddTransient<LibraryViewModel>();
++            services.AddTransient<AddonsViewModel>();
++            services.AddTransient<SearchViewModel>();
++            services.AddTransient<DiagnosticsViewModel>();
++
++            _provider = services.BuildServiceProvider();
++        }
++
++        public static T GetRequiredService<T>() where T : notnull =>
++            Provider.GetRequiredService<T>();
++    }
++}
+diff --git a/StreamioX.App/Models/Movie.cs b/StreamioX.App/Models/Movie.cs
+index f588f86..7ee213c 100644
+--- a/StreamioX.App/Models/Movie.cs
++++ b/StreamioX.App/Models/Movie.cs
+@@ -1,38 +1,31 @@
+-﻿// Models/Movie.cs
+ using System.Text.Json.Serialization;
+ 
+ namespace StreamioX.App.Models
+ {
+-    /// <summary>
+-    /// Represents a media item (Movie or Series) returned by a Stremio add-on catalog.
+-    /// </summary>
+     public class Movie
+     {
+         [JsonPropertyName("id")]
+-        public string Id { get; set; }
++        public string? Id { get; set; }
+ 
+         [JsonPropertyName("type")]
+-        public string Type { get; set; }
++        public string? Type { get; set; }
+ 
+         [JsonPropertyName("name")]
+-        public string Title { get; set; }
++        public string? Title { get; set; }
+ 
+         [JsonPropertyName("poster")]
+-        public string PosterUrl { get; set; }
++        public string? PosterUrl { get; set; }
+ 
+         [JsonPropertyName("description")]
+-        public string Description { get; set; }
++        public string? Description { get; set; }
+ 
+         [JsonPropertyName("releaseInfo")]
+-        public string ReleaseInfo { get; set; }
++        public string? ReleaseInfo { get; set; }
+     }
+ 
+-    /// <summary>
+-    /// Wrapper container for Stremio catalog API responses.
+-    /// </summary>
+     public class CatalogResponse
+     {
+         [JsonPropertyName("metas")]
+-        public Movie[] Metas { get; set; }
++        public Movie[]? Metas { get; set; }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Models/StreamSource.cs b/StreamioX.App/Models/StreamSource.cs
+index 825dfd5..a7c603a 100644
+--- a/StreamioX.App/Models/StreamSource.cs
++++ b/StreamioX.App/Models/StreamSource.cs
+@@ -1,23 +1,20 @@
+-﻿using System.Text.Json.Serialization;
++using System.Text.Json.Serialization;
+ 
+ namespace StreamioX.App.Models
+ {
+-    /// <summary>
+-    /// Represents a stream result returned by a Stremio stream add-on[cite: 1, 2].
+-    /// </summary>
+     public class StreamSource
+     {
+         [JsonPropertyName("name")]
+-        public string Name { get; set; }
++        public string? Name { get; set; }
+ 
+         [JsonPropertyName("title")]
+-        public string Title { get; set; }
++        public string? Title { get; set; }
+ 
+         [JsonPropertyName("url")]
+-        public string Url { get; set; }
++        public string? Url { get; set; }
+ 
+         [JsonPropertyName("infoHash")]
+-        public string InfoHash { get; set; }
++        public string? InfoHash { get; set; }
+ 
+         [JsonPropertyName("fileIdx")]
+         public int? FileIdx { get; set; }
+@@ -26,6 +23,6 @@ namespace StreamioX.App.Models
+     public class StreamResponse
+     {
+         [JsonPropertyName("streams")]
+-        public StreamSource[] Streams { get; set; }
++        public StreamSource[]? Streams { get; set; }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Services/CatalogService.cs b/StreamioX.App/Services/CatalogService.cs
+index 74ab20c..83c3715 100644
+--- a/StreamioX.App/Services/CatalogService.cs
++++ b/StreamioX.App/Services/CatalogService.cs
+@@ -1,15 +1,12 @@
+-﻿// Services/CatalogService.cs
+ using System;
+ using System.Collections.Generic;
++using System.Threading;
+ using System.Threading.Tasks;
+ using StreamioX.App.Models;
+ 
+ namespace StreamioX.App.Services
+ {
+-    /// <summary>
+-    /// Concrete implementation of ICatalogService that queries Stremio add-on endpoints[cite: 1, 2].
+-    /// </summary>
+-    public class CatalogService : ICatalogService
++    public sealed class CatalogService : ICatalogService
+     {
+         private readonly StremioClient _stremioClient;
+ 
+@@ -18,16 +15,22 @@ namespace StreamioX.App.Services
+             _stremioClient = stremioClient ?? throw new ArgumentNullException(nameof(stremioClient));
+         }
+ 
+-        public async Task<IEnumerable<Movie>> GetCatalogAsync(string addonBaseUrl, string type, string catalogId)
++        public async Task<IReadOnlyList<Movie>> GetCatalogAsync(
++            string addonBaseUrl,
++            string type,
++            string catalogId,
++            CancellationToken cancellationToken = default)
+         {
+             if (string.IsNullOrWhiteSpace(addonBaseUrl))
+-                return new Movie[0];
++                return Array.Empty<Movie>();
+ 
+-            // Standard Stremio Addon Catalog URL: {addonBaseUrl}/catalog/{type}/{catalogId}.json[cite: 1, 2]
+             string url = $"{addonBaseUrl.TrimEnd('/')}/catalog/{type}/{catalogId}.json";
+ 
+-            var response = await _stremioClient.GetFromJsonAsync<CatalogResponse>(url);
+-            return response?.Metas ?? new Movie[0];
++            var response = await _stremioClient
++                .GetFromJsonAsync<CatalogResponse>(url, cancellationToken)
++                .ConfigureAwait(false);
++
++            return response?.Metas ?? Array.Empty<Movie>();
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Services/Interfaces/ICatalogService.cs b/StreamioX.App/Services/Interfaces/ICatalogService.cs
+index f8188e7..3e9da70 100644
+--- a/StreamioX.App/Services/Interfaces/ICatalogService.cs
++++ b/StreamioX.App/Services/Interfaces/ICatalogService.cs
+@@ -1,21 +1,16 @@
+-﻿// Services/Interfaces/ICatalogService.cs
+ using System.Collections.Generic;
++using System.Threading;
+ using System.Threading.Tasks;
+ using StreamioX.App.Models;
+ 
+ namespace StreamioX.App.Services
+ {
+-    /// <summary>
+-    /// Contract for fetching media catalogs and metadata items from Stremio add-ons.
+-    /// </summary>
+     public interface ICatalogService
+     {
+-        /// <summary>
+-        /// Fetches a list of media items from a specified Stremio add-on catalog[cite: 1].
+-        /// </summary>
+-        /// <param name="addonBaseUrl">Base URL of the Stremio add-on (e.g., https://cinemeta-stremio.strem.fun)[cite: 1].</param>
+-        /// <param name="type">Media type filter (e.g., "movie" or "series")[cite: 1].</param>
+-        /// <param name="catalogId">Catalog identifier (e.g., "top" or "popular")[cite: 1].</param>
+-        Task<IEnumerable<Movie>> GetCatalogAsync(string addonBaseUrl, string type, string catalogId);
++        Task<IReadOnlyList<Movie>> GetCatalogAsync(
++            string addonBaseUrl,
++            string type,
++            string catalogId,
++            CancellationToken cancellationToken = default);
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Services/Interfaces/IStreamService.cs b/StreamioX.App/Services/Interfaces/IStreamService.cs
+index 984b115..5aafe64 100644
+--- a/StreamioX.App/Services/Interfaces/IStreamService.cs
++++ b/StreamioX.App/Services/Interfaces/IStreamService.cs
+@@ -1,14 +1,16 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
++using System.Threading;
+ using System.Threading.Tasks;
+ using StreamioX.App.Models;
+ 
+ namespace StreamioX.App.Services
+ {
+-    /// <summary>
+-    /// Contract for fetching playback stream links from Stremio add-ons[cite: 1, 2].
+-    /// </summary>
+     public interface IStreamService
+     {
+-        Task<IEnumerable<StreamSource>> GetStreamsAsync(string addonBaseUrl, string type, string id);
++        Task<IReadOnlyList<StreamSource>> GetStreamsAsync(
++            string addonBaseUrl,
++            string type,
++            string id,
++            CancellationToken cancellationToken = default);
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Services/StreamService.cs b/StreamioX.App/Services/StreamService.cs
+index 0991ca1..511f0a3 100644
+--- a/StreamioX.App/Services/StreamService.cs
++++ b/StreamioX.App/Services/StreamService.cs
+@@ -1,11 +1,12 @@
+-﻿using System;
++using System;
+ using System.Collections.Generic;
++using System.Threading;
+ using System.Threading.Tasks;
+ using StreamioX.App.Models;
+ 
+ namespace StreamioX.App.Services
+ {
+-    public class StreamService : IStreamService
++    public sealed class StreamService : IStreamService
+     {
+         private readonly StremioClient _stremioClient;
+ 
+@@ -14,16 +15,22 @@ namespace StreamioX.App.Services
+             _stremioClient = stremioClient ?? throw new ArgumentNullException(nameof(stremioClient));
+         }
+ 
+-        public async Task<IEnumerable<StreamSource>> GetStreamsAsync(string addonBaseUrl, string type, string id)
++        public async Task<IReadOnlyList<StreamSource>> GetStreamsAsync(
++            string addonBaseUrl,
++            string type,
++            string id,
++            CancellationToken cancellationToken = default)
+         {
+             if (string.IsNullOrWhiteSpace(addonBaseUrl) || string.IsNullOrWhiteSpace(id))
+-                return new StreamSource[0];
++                return Array.Empty<StreamSource>();
+ 
+-            // Standard Stremio Stream URL format: {addonBaseUrl}/stream/{type}/{id}.json[cite: 1, 2]
+             string url = $"{addonBaseUrl.TrimEnd('/')}/stream/{type}/{id}.json";
+ 
+-            var response = await _stremioClient.GetFromJsonAsync<StreamResponse>(url);
+-            return response?.Streams ?? new StreamSource[0];
++            var response = await _stremioClient
++                .GetFromJsonAsync<StreamResponse>(url, cancellationToken)
++                .ConfigureAwait(false);
++
++            return response?.Streams ?? Array.Empty<StreamSource>();
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Services/StremioClient.cs b/StreamioX.App/Services/StremioClient.cs
+index 8e07bd3..5dfedf8 100644
+--- a/StreamioX.App/Services/StremioClient.cs
++++ b/StreamioX.App/Services/StremioClient.cs
+@@ -1,44 +1,40 @@
+-﻿// Services/StremioClient.cs
+ using System;
+ using System.Net.Http;
+ using System.Text.Json;
++using System.Threading;
+ using System.Threading.Tasks;
+ 
+ namespace StreamioX.App.Services
+ {
+     /// <summary>
+-    /// Handles low-level HTTP communication with Stremio add-on servers and manifest endpoints.
++    /// Handles low-level HTTP communication with Stremio add-on servers.
+     /// </summary>
+-    public class StremioClient
++    public sealed class StremioClient
+     {
++        private static readonly JsonSerializerOptions JsonOptions = new()
++        {
++            PropertyNameCaseInsensitive = true
++        };
++
+         private readonly HttpClient _httpClient;
+ 
+-        public StremioClient(HttpClient httpClient = null)
++        public StremioClient(HttpClient httpClient)
+         {
+-            _httpClient = httpClient ?? new HttpClient();
++            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+         }
+ 
+         /// <summary>
+-        /// Asynchronously fetches and deserializes JSON data from a specified Stremio add-on URL.
++        /// Fetches and deserializes JSON from a Stremio add-on URL.
+         /// </summary>
+-        public async Task<T> GetFromJsonAsync<T>(string url)
++        public async Task<T?> GetFromJsonAsync<T>(string url, CancellationToken cancellationToken = default)
+         {
+-            try
+-            {
+-                var response = await _httpClient.GetAsync(url);
+-                response.EnsureSuccessStatusCode();
++            ArgumentException.ThrowIfNullOrWhiteSpace(url);
++
++            using var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
++            response.EnsureSuccessStatusCode();
+ 
+-                var jsonString = await response.Content.ReadAsStringAsync();
+-                return JsonSerializer.Deserialize<T>(jsonString, new JsonSerializerOptions
+-                {
+-                    PropertyNameCaseInsensitive = true
+-                });
+-            }
+-            catch (Exception ex)
+-            {
+-                System.Diagnostics.Debug.WriteLine($"[StremioClient] Error fetching {url}: {ex.Message}");
+-                return default;
+-            }
++            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
++            return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/StreamioX.App.csproj b/StreamioX.App/StreamioX.App.csproj
+index b18c9a6..36e73e0 100644
+--- a/StreamioX.App/StreamioX.App.csproj
++++ b/StreamioX.App/StreamioX.App.csproj
+@@ -18,6 +18,8 @@
+   </ItemGroup>
+   <ItemGroup>
+     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
++    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
++    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+     <PackageReference Include="Microsoft.UI.Xaml" Version="2.8.7" />
+   </ItemGroup>
+-</Project>
+\ No newline at end of file
++</Project>
+diff --git a/StreamioX.App/ViewModels/DetailsViewModel.cs b/StreamioX.App/ViewModels/DetailsViewModel.cs
+index 9bd22f9..910919f 100644
+--- a/StreamioX.App/ViewModels/DetailsViewModel.cs
++++ b/StreamioX.App/ViewModels/DetailsViewModel.cs
+@@ -1,7 +1,8 @@
+-﻿using CommunityToolkit.Mvvm.ComponentModel;
++using CommunityToolkit.Mvvm.ComponentModel;
+ using CommunityToolkit.Mvvm.Input;
+ using System;
+ using System.Collections.ObjectModel;
++using System.Threading;
+ using System.Threading.Tasks;
+ using StreamioX.App.Models;
+ using StreamioX.App.Navigation;
+@@ -13,16 +14,20 @@ namespace StreamioX.App.ViewModels
+     {
+         private readonly IStreamService _streamService;
+         private readonly INavigationService _navigationService;
++        private CancellationTokenSource? _loadCts;
+ 
+         [ObservableProperty]
+-        private Movie selectedMovie;
++        private Movie? selectedMovie;
+ 
+         [ObservableProperty]
+-        private ObservableCollection<StreamSource> streams = new ObservableCollection<StreamSource>();
++        private ObservableCollection<StreamSource> streams = new();
+ 
+         [ObservableProperty]
+         private bool isLoadingStreams;
+ 
++        [ObservableProperty]
++        private string? errorMessage;
++
+         public DetailsViewModel(IStreamService streamService, INavigationService navigationService)
+         {
+             _streamService = streamService ?? throw new ArgumentNullException(nameof(streamService));
+@@ -39,23 +44,35 @@ namespace StreamioX.App.ViewModels
+         {
+             if (SelectedMovie == null) return;
+ 
++            _loadCts?.Cancel();
++            _loadCts = new CancellationTokenSource();
++            var token = _loadCts.Token;
++
+             IsLoadingStreams = true;
++            ErrorMessage = null;
+             Streams.Clear();
+ 
+             try
+             {
+-                // Default Cinemeta metadata or stream resolution endpoint
+-                string testAddonUrl = "https://v3-cinemeta.strem.fun";
+-                var fetchedStreams = await _streamService.GetStreamsAsync(testAddonUrl, SelectedMovie.Type ?? "movie", SelectedMovie.Id);
++                string addonUrl = "https://v3-cinemeta.strem.fun";
++                var fetchedStreams = await _streamService.GetStreamsAsync(
++                    addonUrl,
++                    SelectedMovie.Type ?? "movie",
++                    SelectedMovie.Id ?? string.Empty,
++                    token);
+ 
+-                if (fetchedStreams != null)
++                foreach (var stream in fetchedStreams)
+                 {
+-                    foreach (var stream in fetchedStreams)
+-                    {
+-                        Streams.Add(stream);
+-                    }
++                    Streams.Add(stream);
+                 }
+             }
++            catch (OperationCanceledException)
++            {
++            }
++            catch (Exception ex)
++            {
++                ErrorMessage = $"Failed to load streams: {ex.Message}";
++            }
+             finally
+             {
+                 IsLoadingStreams = false;
+@@ -63,12 +80,10 @@ namespace StreamioX.App.ViewModels
+         }
+ 
+         [RelayCommand]
+-        private void PlayStream(StreamSource stream)
++        private void PlayStream(StreamSource? stream)
+         {
+             if (stream == null || string.IsNullOrWhiteSpace(stream.Url)) return;
+-
+-            // Route directly to PlayerPage with the resolved stream URL[cite: 1, 2]
+             _navigationService.NavigateTo(NavigationRoute.Player, stream.Url);
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/ViewModels/DiscoverViewModel.cs b/StreamioX.App/ViewModels/DiscoverViewModel.cs
+index 0f9a4de..0e2ebf5 100644
+--- a/StreamioX.App/ViewModels/DiscoverViewModel.cs
++++ b/StreamioX.App/ViewModels/DiscoverViewModel.cs
+@@ -1,36 +1,28 @@
+-﻿// ViewModels/DiscoverViewModel.cs
+ using CommunityToolkit.Mvvm.ComponentModel;
+ using CommunityToolkit.Mvvm.Input;
+ using System;
+ using System.Collections.ObjectModel;
++using System.Threading;
+ using System.Threading.Tasks;
+ using StreamioX.App.Models;
+ using StreamioX.App.Services;
+ 
+ namespace StreamioX.App.ViewModels
+ {
+-    /// <summary>
+-    /// ViewModel for browsing Stremio add-on catalogs and displaying media cards.
+-    /// </summary>
+     public partial class DiscoverViewModel : ObservableObject
+     {
+         private readonly ICatalogService _catalogService;
++        private CancellationTokenSource? _loadCts;
+ 
+-        /// <summary>
+-        /// Collection of movies fetched from the Stremio add-on catalog.
+-        /// </summary>
+         [ObservableProperty]
+-        private ObservableCollection<Movie> movies = new ObservableCollection<Movie>();
++        private ObservableCollection<Movie> movies = new();
+ 
+-        /// <summary>
+-        /// Indicates whether a catalog fetch request is currently in progress[cite: 1, 2].
+-        /// </summary>
+         [ObservableProperty]
+         private bool isLoading;
+ 
+-        /// <summary>
+-        /// Default Cinemeta endpoint for public catalog metadata[cite: 1, 2].
+-        /// </summary>
++        [ObservableProperty]
++        private string? errorMessage;
++
+         public string DefaultAddonUrl { get; set; } = "https://cinemeta-stremio.strem.fun";
+ 
+         public DiscoverViewModel(ICatalogService catalogService)
+@@ -38,35 +30,41 @@ namespace StreamioX.App.ViewModels
+             _catalogService = catalogService ?? throw new ArgumentNullException(nameof(catalogService));
+         }
+ 
+-        /// <summary>
+-        /// Fetches media items from a specified Stremio catalog endpoint[cite: 1, 2].
+-        /// </summary>
+         [RelayCommand]
+-        public async Task LoadCatalogAsync(string addonUrl = null)
++        public async Task LoadCatalogAsync(string? addonUrl = null)
+         {
+             if (IsLoading) return;
+ 
++            _loadCts?.Cancel();
++            _loadCts = new CancellationTokenSource();
++            var token = _loadCts.Token;
++
+             IsLoading = true;
++            ErrorMessage = null;
++
+             try
+             {
+                 string targetUrl = string.IsNullOrWhiteSpace(addonUrl) ? DefaultAddonUrl : addonUrl;
+-
+-                // Query popular movies from Cinemeta catalog endpoint[cite: 1, 2]
+-                var items = await _catalogService.GetCatalogAsync(targetUrl, "movie", "top");
++                var items = await _catalogService.GetCatalogAsync(targetUrl, "movie", "top", token);
+ 
+                 Movies.Clear();
+-                if (items != null)
++                foreach (var item in items)
+                 {
+-                    foreach (var item in items)
+-                    {
+-                        Movies.Add(item);
+-                    }
++                    Movies.Add(item);
+                 }
+             }
++            catch (OperationCanceledException)
++            {
++                // Expected on navigation away
++            }
++            catch (Exception ex)
++            {
++                ErrorMessage = $"Failed to load catalog: {ex.Message}";
++            }
+             finally
+             {
+                 IsLoading = false;
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/ViewModels/MainViewModel.cs b/StreamioX.App/ViewModels/MainViewModel.cs
+index 85be9c9..ca93df7 100644
+--- a/StreamioX.App/ViewModels/MainViewModel.cs
++++ b/StreamioX.App/ViewModels/MainViewModel.cs
+@@ -1,88 +1,37 @@
+-﻿// ViewModels/MainViewModel.cs
+ using CommunityToolkit.Mvvm.ComponentModel;
+ using CommunityToolkit.Mvvm.Input;
+ using StreamioX.App.Navigation;
+ 
+ namespace StreamioX.App.ViewModels
+ {
+-    /// <summary>
+-    /// Coordinates top-level application routing and manages the state 
+-    /// of the Xbox navigation rail destinations.
+-    /// </summary>
+     public partial class MainViewModel : ObservableObject
+     {
+         private readonly INavigationService _navigationService;
+ 
+-        /// <summary>
+-        /// Initializes the MainViewModel with the injected navigation service.
+-        /// </summary>
+-        /// <param name="navigationService">Service responsible for physical frame navigation.</param>
+         public MainViewModel(INavigationService navigationService)
+         {
+             _navigationService = navigationService;
+         }
+ 
+-        /// <summary>
+-        /// Navigates the active frame to the Home dashboard view[cite: 1].
+-        /// </summary>
+         [RelayCommand]
+-        private void NavigateToHome()
+-        {
+-            _navigationService.NavigateTo(NavigationRoute.Home);
+-        }
++        private void NavigateToHome() => _navigationService.NavigateTo(NavigationRoute.Home);
+ 
+-        /// <summary>
+-        /// Navigates the active frame to the Discover catalog view[cite: 1].
+-        /// </summary>
+         [RelayCommand]
+-        private void NavigateToDiscover()
+-        {
+-            _navigationService.NavigateTo(NavigationRoute.Discover);
+-        }
++        private void NavigateToDiscover() => _navigationService.NavigateTo(NavigationRoute.Discover);
+ 
+-        /// <summary>
+-        /// Navigates the active frame to the user's Library view[cite: 1].
+-        /// </summary>
+         [RelayCommand]
+-        private void NavigateToLibrary()
+-        {
+-            _navigationService.NavigateTo(NavigationRoute.Library);
+-        }
++        private void NavigateToLibrary() => _navigationService.NavigateTo(NavigationRoute.Library);
+ 
+-        /// <summary>
+-        /// Navigates the active frame to the Add-ons manager view[cite: 1].
+-        /// </summary>
+         [RelayCommand]
+-        private void NavigateToAddons()
+-        {
+-            _navigationService.NavigateTo(NavigationRoute.Addons);
+-        }
++        private void NavigateToAddons() => _navigationService.NavigateTo(NavigationRoute.Addons);
+ 
+-        /// <summary>
+-        /// Navigates the active frame to the native video player view[cite: 1].
+-        /// </summary>
+         [RelayCommand]
+-        private void NavigateToPlayer()
+-        {
+-            _navigationService.NavigateTo(NavigationRoute.Player);
+-        }
++        private void NavigateToPlayer() => _navigationService.NavigateTo(NavigationRoute.Player);
+ 
+-        /// <summary>
+-        /// Navigates the active frame to the Settings view[cite: 1].
+-        /// </summary>
+         [RelayCommand]
+-        private void NavigateToSettings()
+-        {
+-            _navigationService.NavigateTo(NavigationRoute.Settings);
+-        }
++        private void NavigateToSettings() => _navigationService.NavigateTo(NavigationRoute.Settings);
+ 
+-        /// <summary>
+-        /// Navigates the active frame to the System Diagnostics view[cite: 1].
+-        /// </summary>
+         [RelayCommand]
+-        private void NavigateToDiagnostic()
+-        {
+-            _navigationService.NavigateTo(NavigationRoute.Diagnostics);
+-        }
++        private void NavigateToDiagnostic() => _navigationService.NavigateTo(NavigationRoute.Diagnostics);
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/ViewModels/PlayerViewModel.cs b/StreamioX.App/ViewModels/PlayerViewModel.cs
+index 480f6bc..d8dd593 100644
+--- a/StreamioX.App/ViewModels/PlayerViewModel.cs
++++ b/StreamioX.App/ViewModels/PlayerViewModel.cs
+@@ -1,29 +1,19 @@
+-﻿// ViewModels/PlayerViewModel.cs
+ using CommunityToolkit.Mvvm.ComponentModel;
+ using CommunityToolkit.Mvvm.Input;
+-using System;
+ 
+ namespace StreamioX.App.ViewModels
+ {
+-    /// <summary>
+-    /// Manages playback state, stream URL resolution, and media transport controls 
+-    /// for the native UWP MediaPlayerElement.
+-    /// </summary>
+     public partial class PlayerViewModel : ObservableObject
+     {
+         [ObservableProperty]
+         private string mediaTitle = "Now Playing";
+ 
+         [ObservableProperty]
+-        private string currentStreamUrl;
++        private string? currentStreamUrl;
+ 
+         [ObservableProperty]
+         private bool isPlaying = true;
+ 
+-        /// <summary>
+-        /// Initializes the PlayerViewModel with an optional media stream URL or identifier.
+-        /// </summary>
+-        /// <param name="streamUrl">The direct HTTP, HLS, or DASH stream URL.</param>
+         public void LoadStream(string streamUrl, string title)
+         {
+             CurrentStreamUrl = streamUrl;
+@@ -36,4 +26,4 @@ namespace StreamioX.App.ViewModels
+             IsPlaying = !IsPlaying;
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/ViewModels/SettingsViewModel.cs b/StreamioX.App/ViewModels/SettingsViewModel.cs
+index 3642a11..d1c750e 100644
+--- a/StreamioX.App/ViewModels/SettingsViewModel.cs
++++ b/StreamioX.App/ViewModels/SettingsViewModel.cs
+@@ -1,4 +1,4 @@
+-﻿using CommunityToolkit.Mvvm.ComponentModel;
++using CommunityToolkit.Mvvm.ComponentModel;
+ using CommunityToolkit.Mvvm.Input;
+ using System;
+ using Windows.System;
+@@ -8,15 +8,16 @@ namespace StreamioX.App.ViewModels
+ {
+     public partial class SettingsViewModel : ObservableObject
+     {
+-        private DispatcherTimer _telemetryTimer;
++        private DispatcherTimer? _telemetryTimer;
+ 
+         [ObservableProperty]
+         private string appVersionDisplay = "Version 1.0.0-alpha";
++
+         [ObservableProperty]
+-        private string currentMemoryUsage;
++        private string currentMemoryUsage = "—";
+ 
+         [ObservableProperty]
+-        private string systemHardLimit;
++        private string systemHardLimit = "—";
+ 
+         [ObservableProperty]
+         private double memoryPercentage;
+@@ -33,9 +34,9 @@ namespace StreamioX.App.ViewModels
+         {
+             _telemetryTimer = new DispatcherTimer
+             {
+-                Interval = TimeSpan.FromMilliseconds(1000)
++                Interval = TimeSpan.FromSeconds(1)
+             };
+-            _telemetryTimer.Tick += (s, e) => UpdateMemoryStats();
++            _telemetryTimer.Tick += (_, _) => UpdateMemoryStats();
+             _telemetryTimer.Start();
+             UpdateMemoryStats();
+         }
+@@ -47,7 +48,7 @@ namespace StreamioX.App.ViewModels
+ 
+             CurrentMemoryUsage = $"{usageMB:F2} MB";
+             SystemHardLimit = $"{limitMB:F2} MB";
+-            MemoryPercentage = (usageMB / limitMB) * 100;
++            MemoryPercentage = limitMB > 0 ? (usageMB / limitMB) * 100 : 0;
+         }
+ 
+         [RelayCommand]
+@@ -56,4 +57,4 @@ namespace StreamioX.App.ViewModels
+             // TODO: Implement cache clearing logic
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/ViewModels/ViewModelBase.cs b/StreamioX.App/ViewModels/ViewModelBase.cs
+deleted file mode 100644
+index a4743bc..0000000
+--- a/StreamioX.App/ViewModels/ViewModelBase.cs
++++ /dev/null
+@@ -1,44 +0,0 @@
+-﻿using System.ComponentModel;
+-using System.Runtime.CompilerServices;
+-
+-namespace StreamioX.App.ViewModels
+-{
+-    /// <summary>
+-    /// Base class for all ViewModels. Provides common functionality for 
+-    /// notifying the UI of property changes via INotifyPropertyChanged.
+-    /// </summary>
+-    public abstract class ViewModelBase : INotifyPropertyChanged
+-    {
+-        /// <summary>
+-        /// Event triggered when a property value changes.
+-        /// </summary>
+-        public event PropertyChangedEventHandler PropertyChanged;
+-
+-        /// <summary>
+-        /// Checks if a property's value has changed and, if so, updates the backing field 
+-        /// and raises the PropertyChanged event.
+-        /// </summary>
+-        /// <typeparam name="T">The type of the property.</typeparam>
+-        /// <param name="backingStore">Reference to the property's backing field.</param>
+-        /// <param name="value">The new value to set.</param>
+-        /// <param name="propertyName">The name of the property (automatically resolved by the compiler).</param>
+-        /// <returns>True if the value was changed; otherwise, false.</returns>
+-        protected bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
+-        {
+-            if (Equals(backingStore, value)) return false;
+-
+-            backingStore = value;
+-            OnPropertyChanged(propertyName);
+-            return true;
+-        }
+-
+-        /// <summary>
+-        /// Manually raises the PropertyChanged event for a specific property.
+-        /// </summary>
+-        /// <param name="propertyName">The name of the property that changed.</param>
+-        protected void OnPropertyChanged([CallerMemberName] string propertyName = "")
+-        {
+-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+-        }
+-    }
+-}
+\ No newline at end of file
+diff --git a/StreamioX.App/Views/DetailsPage.xaml.cs b/StreamioX.App/Views/DetailsPage.xaml.cs
+index a270d88..f60a60f 100644
+--- a/StreamioX.App/Views/DetailsPage.xaml.cs
++++ b/StreamioX.App/Views/DetailsPage.xaml.cs
+@@ -1,6 +1,4 @@
+-﻿using StreamioX.App.Models;
+-using StreamioX.App.Navigation;
+-using StreamioX.App.Services;
++using StreamioX.App.Models;
+ using StreamioX.App.ViewModels;
+ using Windows.UI.Xaml.Controls;
+ using Windows.UI.Xaml.Navigation;
+@@ -13,15 +11,9 @@ namespace StreamioX.App.Views
+ 
+         public DetailsPage()
+         {
+-            this.InitializeComponent();
+-
+-            var httpClient = new System.Net.Http.HttpClient();
+-            var stremioClient = new StremioClient(httpClient);
+-            var streamService = new StreamService(stremioClient);
+-            var navigationService = new NavigationService();
+-
+-            ViewModel = new DetailsViewModel(streamService, navigationService);
+-            this.DataContext = ViewModel;
++            InitializeComponent();
++            ViewModel = AppServices.GetRequiredService<DetailsViewModel>();
++            DataContext = ViewModel;
+         }
+ 
+         protected override async void OnNavigatedTo(NavigationEventArgs e)
+@@ -34,4 +26,4 @@ namespace StreamioX.App.Views
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Views/DiscoverPage.xaml.cs b/StreamioX.App/Views/DiscoverPage.xaml.cs
+index cb784a6..bb5dd53 100644
+--- a/StreamioX.App/Views/DiscoverPage.xaml.cs
++++ b/StreamioX.App/Views/DiscoverPage.xaml.cs
+@@ -1,8 +1,6 @@
+-﻿using StreamioX.App.Helpers;
++using StreamioX.App.Helpers;
+ using StreamioX.App.Models;
+-using StreamioX.App.Services;
+ using StreamioX.App.ViewModels;
+-using System.Net.Http;
+ using Windows.UI.Xaml;
+ using Windows.UI.Xaml.Controls;
+ using Windows.UI.Xaml.Navigation;
+@@ -16,14 +14,8 @@ namespace StreamioX.App.Views
+         public DiscoverPage()
+         {
+             InitializeComponent();
+-
+-            var httpClient = new HttpClient();
+-            var stremioClient = new StremioClient(httpClient);
+-            var catalogService = new CatalogService(stremioClient);
+-
+-            ViewModel = new DiscoverViewModel(catalogService);
++            ViewModel = AppServices.GetRequiredService<DiscoverViewModel>();
+             DataContext = ViewModel;
+-
+             Loaded += DiscoverPage_Loaded;
+         }
+ 
+@@ -44,9 +36,7 @@ namespace StreamioX.App.Views
+             base.OnNavigatingFrom(e);
+         }
+ 
+-        private void GridView_ItemClick(
+-            object sender,
+-            ItemClickEventArgs e)
++        private void GridView_ItemClick(object sender, ItemClickEventArgs e)
+         {
+             if (e.ClickedItem is Movie selectedMovie)
+             {
+@@ -54,4 +44,4 @@ namespace StreamioX.App.Views
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Views/HomePage.xaml.cs b/StreamioX.App/Views/HomePage.xaml.cs
+index bb74292..cb5afe5 100644
+--- a/StreamioX.App/Views/HomePage.xaml.cs
++++ b/StreamioX.App/Views/HomePage.xaml.cs
+@@ -1,4 +1,4 @@
+-﻿using StreamioX.App.Helpers;
++using StreamioX.App.Helpers;
+ using StreamioX.App.ViewModels;
+ using Windows.UI.Xaml;
+ using Windows.UI.Xaml.Controls;
+@@ -13,10 +13,8 @@ namespace StreamioX.App.Views
+         public HomePage()
+         {
+             InitializeComponent();
+-
+-            ViewModel = new HomeViewModel();
++            ViewModel = AppServices.GetRequiredService<HomeViewModel>();
+             DataContext = ViewModel;
+-
+             Loaded += HomePage_Loaded;
+         }
+ 
+@@ -31,11 +29,9 @@ namespace StreamioX.App.Views
+             base.OnNavigatingFrom(e);
+         }
+ 
+-        private void ExploreDiscover_Click(
+-            object sender,
+-            RoutedEventArgs e)
++        private void ExploreDiscover_Click(object sender, RoutedEventArgs e)
+         {
+             Frame.Navigate(typeof(DiscoverPage));
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Views/LibraryPage.xaml.cs b/StreamioX.App/Views/LibraryPage.xaml.cs
+index a40146a..ec4564c 100644
+--- a/StreamioX.App/Views/LibraryPage.xaml.cs
++++ b/StreamioX.App/Views/LibraryPage.xaml.cs
+@@ -1,5 +1,5 @@
+-﻿using Windows.UI.Xaml.Controls;
+ using StreamioX.App.ViewModels;
++using Windows.UI.Xaml.Controls;
+ 
+ namespace StreamioX.App.Views
+ {
+@@ -9,9 +9,9 @@ namespace StreamioX.App.Views
+ 
+         public LibraryPage()
+         {
+-            this.InitializeComponent();
+-            ViewModel = new LibraryViewModel();
+-            this.DataContext = ViewModel;
++            InitializeComponent();
++            ViewModel = AppServices.GetRequiredService<LibraryViewModel>();
++            DataContext = ViewModel;
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Views/MainPage.xaml.cs b/StreamioX.App/Views/MainPage.xaml.cs
+index 08f1769..002d661 100644
+--- a/StreamioX.App/Views/MainPage.xaml.cs
++++ b/StreamioX.App/Views/MainPage.xaml.cs
+@@ -1,4 +1,3 @@
+-﻿using System;
+ using StreamioX.App.Navigation;
+ using StreamioX.App.ViewModels;
+ using Windows.UI.Core;
+@@ -11,16 +10,16 @@ namespace StreamioX.App.Views
+     {
+         public MainViewModel ViewModel { get; }
+ 
+-        private readonly NavigationService _navigationService;
++        private readonly INavigationService _navigationService;
+ 
+         public MainPage()
+         {
+             InitializeComponent();
+ 
+-            _navigationService = new NavigationService();
++            _navigationService = AppServices.GetRequiredService<INavigationService>();
+             _navigationService.Initialize(ContentFrame);
+ 
+-            ViewModel = new MainViewModel(_navigationService);
++            ViewModel = AppServices.GetRequiredService<MainViewModel>();
+             DataContext = ViewModel;
+ 
+             Loaded += MainPage_Loaded;
+@@ -29,8 +28,7 @@ namespace StreamioX.App.Views
+ 
+         private void MainPage_Loaded(object sender, RoutedEventArgs e)
+         {
+-            SystemNavigationManager.GetForCurrentView().BackRequested
+-                += System_BackRequested;
++            SystemNavigationManager.GetForCurrentView().BackRequested += System_BackRequested;
+ 
+             NavShell.SelectedItem = HomeNavItem;
+ 
+@@ -41,15 +39,13 @@ namespace StreamioX.App.Views
+ 
+             HomeNavItem.Focus(FocusState.Programmatic);
+         }
++
+         private void MainPage_Unloaded(object sender, RoutedEventArgs e)
+         {
+-            SystemNavigationManager.GetForCurrentView().BackRequested
+-                -= System_BackRequested;
++            SystemNavigationManager.GetForCurrentView().BackRequested -= System_BackRequested;
+         }
+ 
+-        private void System_BackRequested(
+-            object sender,
+-            BackRequestedEventArgs e)
++        private void System_BackRequested(object sender, BackRequestedEventArgs e)
+         {
+             if (ContentFrame.CanGoBack)
+             {
+@@ -58,9 +54,7 @@ namespace StreamioX.App.Views
+             }
+         }
+ 
+-        private void NavShell_ItemInvoked(
+-            NavigationView sender,
+-            NavigationViewItemInvokedEventArgs args)
++        private void NavShell_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+         {
+             if (args.IsSettingsInvoked)
+             {
+@@ -76,27 +70,22 @@ namespace StreamioX.App.Views
+                 case "Home":
+                     ViewModel.NavigateToHomeCommand.Execute(null);
+                     break;
+-
+                 case "Discover":
+                     ViewModel.NavigateToDiscoverCommand.Execute(null);
+                     break;
+-
+                 case "Library":
+                     ViewModel.NavigateToLibraryCommand.Execute(null);
+                     break;
+-
+                 case "Addons":
+                     ViewModel.NavigateToAddonsCommand.Execute(null);
+                     break;
+-
+                 case "Player":
+                     ViewModel.NavigateToPlayerCommand.Execute(null);
+                     break;
+-
+                 case "Diagnostic":
+                     ViewModel.NavigateToDiagnosticCommand.Execute(null);
+                     break;
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Views/PlayerPage.xaml.cs b/StreamioX.App/Views/PlayerPage.xaml.cs
+index a629efb..1dbf884 100644
+--- a/StreamioX.App/Views/PlayerPage.xaml.cs
++++ b/StreamioX.App/Views/PlayerPage.xaml.cs
+@@ -1,4 +1,4 @@
+-﻿using StreamioX.App.ViewModels;
++using StreamioX.App.ViewModels;
+ using System;
+ using Windows.Media.Core;
+ using Windows.UI.Xaml.Controls;
+@@ -6,30 +6,24 @@ using Windows.UI.Xaml.Navigation;
+ 
+ namespace StreamioX.App.Views
+ {
+-    /// <summary>
+-    /// Hosts the native video playback session for StremioX.App on Xbox.
+-    /// </summary>
+     public sealed partial class PlayerPage : Page
+     {
+         public PlayerViewModel ViewModel { get; }
+ 
+         public PlayerPage()
+         {
+-            this.InitializeComponent();
+-            ViewModel = new PlayerViewModel();
+-            this.DataContext = ViewModel;
++            InitializeComponent();
++            ViewModel = AppServices.GetRequiredService<PlayerViewModel>();
++            DataContext = ViewModel;
+         }
+ 
+         protected override void OnNavigatedTo(NavigationEventArgs e)
+         {
+             base.OnNavigatedTo(e);
+ 
+-            // Expecting a stream URL string passed as a navigation parameter from DetailsPage or direct route
+             if (e.Parameter is string streamUrl && !string.IsNullOrWhiteSpace(streamUrl))
+             {
+                 ViewModel.LoadStream(streamUrl, "Stremio Stream");
+-
+-                // Initialize the native media player with the stream source and trigger playback
+                 PlayerWidget.Source = MediaSource.CreateFromUri(new Uri(streamUrl));
+                 PlayerWidget.MediaPlayer.Play();
+             }
+@@ -39,7 +33,6 @@ namespace StreamioX.App.Views
+         {
+             base.OnNavigatedFrom(e);
+ 
+-            // Clean up player resources when leaving the page
+             if (PlayerWidget.MediaPlayer != null)
+             {
+                 PlayerWidget.MediaPlayer.Pause();
+@@ -47,4 +40,4 @@ namespace StreamioX.App.Views
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/StreamioX.App/Views/SettingsPage.xaml.cs b/StreamioX.App/Views/SettingsPage.xaml.cs
+index 5a27657..d7203e2 100644
+--- a/StreamioX.App/Views/SettingsPage.xaml.cs
++++ b/StreamioX.App/Views/SettingsPage.xaml.cs
+@@ -1,5 +1,5 @@
+-﻿using Windows.UI.Xaml.Controls;
+ using StreamioX.App.ViewModels;
++using Windows.UI.Xaml.Controls;
+ 
+ namespace StreamioX.App.Views
+ {
+@@ -9,9 +9,9 @@ namespace StreamioX.App.Views
+ 
+         public SettingsPage()
+         {
+-            this.InitializeComponent();
+-            ViewModel = new SettingsViewModel();
+-            this.DataContext = ViewModel;
++            InitializeComponent();
++            ViewModel = AppServices.GetRequiredService<SettingsViewModel>();
++            DataContext = ViewModel;
+         }
+     }
+-}
+\ No newline at end of file
++}
+-- 
+2.43.0
+
+
+From 68ad17e0061922797ee9ed22708246dbe9afb051 Mon Sep 17 00:00:00 2001
+From: lukeponga-dev <lukeponga-dev@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 01:41:05 +0000
+Subject: [PATCH 2/3] Add Stremio addon connections
+
+- AddonService: install/uninstall, persist to LocalSettings
+- Auto-install official Cinemeta (v3-cinemeta.strem.io) on first run
+- Catalog/stream aggregate across installed addons
+- Working Addons page: list, install by manifest URL, remove
+- Discover/Details use addon registry instead of hard-coded URLs
+---
+ StreamioX.App/App.xaml.cs                     |   5 +-
+ StreamioX.App/AppServices.cs                  |   4 +-
+ StreamioX.App/Models/AddonManifest.cs         |  91 ++++++++
+ StreamioX.App/Services/AddonService.cs        | 208 ++++++++++++++++++
+ StreamioX.App/Services/CatalogService.cs      |  59 ++++-
+ .../Services/Interfaces/IAddonService.cs      |  22 ++
+ .../Services/Interfaces/ICatalogService.cs    |   8 +
+ .../Services/Interfaces/IStreamService.cs     |   8 +
+ StreamioX.App/Services/StreamService.cs       |  31 ++-
+ StreamioX.App/ViewModels/AddonsViewModel.cs   | 119 +++++++++-
+ StreamioX.App/ViewModels/DetailsViewModel.cs  |  30 ++-
+ StreamioX.App/ViewModels/DiscoverViewModel.cs |  21 +-
+ StreamioX.App/Views/AddonsPage.xaml           |  65 +++++-
+ StreamioX.App/Views/AddonsPage.xaml.cs        |  49 +++--
+ 14 files changed, 669 insertions(+), 51 deletions(-)
+ create mode 100644 StreamioX.App/Models/AddonManifest.cs
+ create mode 100644 StreamioX.App/Services/AddonService.cs
+ create mode 100644 StreamioX.App/Services/Interfaces/IAddonService.cs
+
+diff --git a/StreamioX.App/App.xaml.cs b/StreamioX.App/App.xaml.cs
+index 899b352..005f75f 100644
+--- a/StreamioX.App/App.xaml.cs
++++ b/StreamioX.App/App.xaml.cs
+@@ -1,3 +1,4 @@
++using StreamioX.App.Services;
+ using StreamioX.App.Views;
+ using System;
+ using Windows.ApplicationModel;
+@@ -22,6 +23,9 @@ namespace StreamioX.App
+ 
+         protected override void OnLaunched(LaunchActivatedEventArgs e)
+         {
++            // Warm up Stremio addon registry (installs Cinemeta on first run)
++            _ = AppServices.GetRequiredService<IAddonService>().InitializeAsync();
++
+             Frame rootFrame = Window.Current.Content as Frame;
+ 
+             if (rootFrame == null)
+@@ -53,7 +57,6 @@ namespace StreamioX.App
+         private void OnSuspending(object sender, SuspendingEventArgs e)
+         {
+             var deferral = e.SuspendingOperation.GetDeferral();
+-            // TODO: Save application state and stop any background activity
+             deferral.Complete();
+         }
+     }
+diff --git a/StreamioX.App/AppServices.cs b/StreamioX.App/AppServices.cs
+index 307803f..a0755c8 100644
+--- a/StreamioX.App/AppServices.cs
++++ b/StreamioX.App/AppServices.cs
+@@ -3,7 +3,6 @@ using StreamioX.App.Navigation;
+ using StreamioX.App.Services;
+ using StreamioX.App.ViewModels;
+ using System;
+-using System.Net.Http;
+ 
+ namespace StreamioX.App
+ {
+@@ -23,10 +22,11 @@ namespace StreamioX.App
+             services.AddHttpClient<StremioClient>(client =>
+             {
+                 client.Timeout = TimeSpan.FromSeconds(30);
+-                client.DefaultRequestHeaders.UserAgent.ParseAdd("StreamioX/1.0");
++                client.DefaultRequestHeaders.UserAgent.ParseAdd("StreamioX/1.0 (Xbox; UWP)");
+             });
+ 
+             services.AddSingleton<INavigationService, NavigationService>();
++            services.AddSingleton<IAddonService, AddonService>();
+             services.AddSingleton<ICatalogService, CatalogService>();
+             services.AddSingleton<IStreamService, StreamService>();
+ 
+diff --git a/StreamioX.App/Models/AddonManifest.cs b/StreamioX.App/Models/AddonManifest.cs
+new file mode 100644
+index 0000000..108c68e
+--- /dev/null
++++ b/StreamioX.App/Models/AddonManifest.cs
+@@ -0,0 +1,91 @@
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Text.Json;
++using System.Text.Json.Serialization;
++
++namespace StreamioX.App.Models
++{
++    public sealed class AddonManifest
++    {
++        [JsonPropertyName("id")]
++        public string? Id { get; set; }
++
++        [JsonPropertyName("name")]
++        public string? Name { get; set; }
++
++        [JsonPropertyName("description")]
++        public string? Description { get; set; }
++
++        [JsonPropertyName("version")]
++        public string? Version { get; set; }
++
++        [JsonPropertyName("logo")]
++        public string? Logo { get; set; }
++
++        [JsonPropertyName("types")]
++        public List<string>? Types { get; set; }
++
++        [JsonPropertyName("resources")]
++        public List<JsonElement>? Resources { get; set; }
++
++        [JsonPropertyName("catalogs")]
++        public List<CatalogDescriptor>? Catalogs { get; set; }
++
++        [JsonPropertyName("idPrefixes")]
++        public List<string>? IdPrefixes { get; set; }
++
++        public IReadOnlyList<string> GetResourceNames()
++        {
++            if (Resources == null || Resources.Count == 0)
++                return Array.Empty<string>();
++
++            var names = new List<string>();
++            foreach (var r in Resources)
++            {
++                if (r.ValueKind == JsonValueKind.String)
++                {
++                    var s = r.GetString();
++                    if (!string.IsNullOrEmpty(s)) names.Add(s);
++                }
++                else if (r.ValueKind == JsonValueKind.Object && r.TryGetProperty("name", out var nameProp))
++                {
++                    var s = nameProp.GetString();
++                    if (!string.IsNullOrEmpty(s)) names.Add(s);
++                }
++            }
++            return names;
++        }
++
++        public bool SupportsResource(string resourceName) =>
++            GetResourceNames().Any(n => string.Equals(n, resourceName, StringComparison.OrdinalIgnoreCase));
++    }
++
++    public sealed class CatalogDescriptor
++    {
++        [JsonPropertyName("type")]
++        public string? Type { get; set; }
++
++        [JsonPropertyName("id")]
++        public string? Id { get; set; }
++
++        [JsonPropertyName("name")]
++        public string? Name { get; set; }
++    }
++
++    public sealed class InstalledAddon
++    {
++        public string ManifestUrl { get; set; } = string.Empty;
++        public string BaseUrl { get; set; } = string.Empty;
++        public string Id { get; set; } = string.Empty;
++        public string Name { get; set; } = string.Empty;
++        public string? Description { get; set; }
++        public string? Version { get; set; }
++        public string? Logo { get; set; }
++        public List<string> Types { get; set; } = new();
++        public List<string> Resources { get; set; } = new();
++        public List<CatalogDescriptor> Catalogs { get; set; } = new();
++        public List<string> IdPrefixes { get; set; } = new();
++        public bool IsOfficial { get; set; }
++    }
++}
+diff --git a/StreamioX.App/Services/AddonService.cs b/StreamioX.App/Services/AddonService.cs
+new file mode 100644
+index 0000000..b757a1f
+--- /dev/null
++++ b/StreamioX.App/Services/AddonService.cs
+@@ -0,0 +1,208 @@
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Text.Json;
++using System.Threading;
++using System.Threading.Tasks;
++using StreamioX.App.Models;
++using Windows.Storage;
++
++namespace StreamioX.App.Services
++{
++    public sealed class AddonService : IAddonService
++    {
++        public const string OfficialCinemetaManifestUrl = "https://v3-cinemeta.strem.io/manifest.json";
++
++        private static readonly JsonSerializerOptions StorageJson = new()
++        {
++            PropertyNameCaseInsensitive = true,
++            WriteIndented = false
++        };
++
++        private readonly StremioClient _client;
++        private readonly List<InstalledAddon> _addons = new();
++        private bool _initialized;
++
++        public IReadOnlyList<InstalledAddon> InstalledAddons => _addons;
++
++        public AddonService(StremioClient client)
++        {
++            _client = client ?? throw new ArgumentNullException(nameof(client));
++        }
++
++        public async Task InitializeAsync(CancellationToken cancellationToken = default)
++        {
++            if (_initialized) return;
++
++            _addons.Clear();
++            var stored = LoadFromSettings();
++            if (stored.Count > 0)
++            {
++                _addons.AddRange(stored);
++            }
++            else
++            {
++                // First run: install official Cinemeta
++                var cinemeta = await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken)
++                    .ConfigureAwait(false);
++                if (cinemeta != null)
++                    cinemeta.IsOfficial = true;
++            }
++
++            // Ensure Cinemeta is present
++            if (!_addons.Any(a => a.Id.Contains("cinemeta", StringComparison.OrdinalIgnoreCase)
++                                  || a.BaseUrl.Contains("cinemeta", StringComparison.OrdinalIgnoreCase)))
++            {
++                var cinemeta = await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken)
++                    .ConfigureAwait(false);
++                if (cinemeta != null)
++                    cinemeta.IsOfficial = true;
++            }
++
++            _initialized = true;
++        }
++
++        public async Task<InstalledAddon?> InstallFromManifestUrlAsync(
++            string manifestUrl,
++            CancellationToken cancellationToken = default)
++        {
++            if (string.IsNullOrWhiteSpace(manifestUrl))
++                return null;
++
++            manifestUrl = NormalizeManifestUrl(manifestUrl);
++
++            var manifest = await _client.GetFromJsonAsync<AddonManifest>(manifestUrl, cancellationToken)
++                .ConfigureAwait(false);
++
++            if (manifest == null || string.IsNullOrWhiteSpace(manifest.Id))
++                return null;
++
++            // Already installed?
++            var existing = _addons.FirstOrDefault(a =>
++                string.Equals(a.Id, manifest.Id, StringComparison.OrdinalIgnoreCase));
++            if (existing != null)
++                return existing;
++
++            var baseUrl = GetBaseUrl(manifestUrl);
++            var addon = new InstalledAddon
++            {
++                ManifestUrl = manifestUrl,
++                BaseUrl = baseUrl,
++                Id = manifest.Id!,
++                Name = manifest.Name ?? manifest.Id!,
++                Description = manifest.Description,
++                Version = manifest.Version,
++                Logo = manifest.Logo,
++                Types = manifest.Types?.ToList() ?? new List<string>(),
++                Resources = manifest.GetResourceNames().ToList(),
++                Catalogs = manifest.Catalogs?.ToList() ?? new List<CatalogDescriptor>(),
++                IdPrefixes = manifest.IdPrefixes?.ToList() ?? new List<string>(),
++                IsOfficial = manifestUrl.Contains("cinemeta", StringComparison.OrdinalIgnoreCase)
++            };
++
++            _addons.Add(addon);
++            SaveToSettings();
++            return addon;
++        }
++
++        public Task UninstallAsync(string addonId)
++        {
++            var item = _addons.FirstOrDefault(a =>
++                string.Equals(a.Id, addonId, StringComparison.OrdinalIgnoreCase));
++            if (item == null)
++                return Task.CompletedTask;
++
++            // Keep at least one catalog provider
++            if (item.IsOfficial && _addons.Count(a => a.Resources.Contains("catalog", StringComparer.OrdinalIgnoreCase)) <= 1)
++                return Task.CompletedTask;
++
++            _addons.Remove(item);
++            SaveToSettings();
++            return Task.CompletedTask;
++        }
++
++        public IReadOnlyList<InstalledAddon> GetCatalogProviders(string? type = null)
++        {
++            return _addons
++                .Where(a => a.Resources.Any(r => string.Equals(r, "catalog", StringComparison.OrdinalIgnoreCase)))
++                .Where(a => type == null
++                            || a.Types.Count == 0
++                            || a.Types.Any(t => string.Equals(t, type, StringComparison.OrdinalIgnoreCase))
++                            || a.Catalogs.Any(c => string.Equals(c.Type, type, StringComparison.OrdinalIgnoreCase)))
++                .ToList();
++        }
++
++        public IReadOnlyList<InstalledAddon> GetStreamProviders(string? type = null, string? contentId = null)
++        {
++            return _addons
++                .Where(a => a.Resources.Any(r => string.Equals(r, "stream", StringComparison.OrdinalIgnoreCase)))
++                .Where(a => type == null
++                            || a.Types.Count == 0
++                            || a.Types.Any(t => string.Equals(t, type, StringComparison.OrdinalIgnoreCase)))
++                .Where(a => contentId == null
++                            || a.IdPrefixes.Count == 0
++                            || a.IdPrefixes.Any(p => contentId.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
++                .ToList();
++        }
++
++        private static string NormalizeManifestUrl(string url)
++        {
++            url = url.Trim();
++            if (url.StartsWith("stremio://", StringComparison.OrdinalIgnoreCase))
++                url = "https://" + url.Substring("stremio://".Length);
++
++            if (!url.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase)
++                && !url.EndsWith("/"))
++            {
++                // allow bare base
++            }
++
++            if (!url.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase))
++            {
++                url = url.TrimEnd('/') + "/manifest.json";
++            }
++
++            return url;
++        }
++
++        private static string GetBaseUrl(string manifestUrl)
++        {
++            var idx = manifestUrl.LastIndexOf("/manifest.json", StringComparison.OrdinalIgnoreCase);
++            if (idx > 0)
++                return manifestUrl.Substring(0, idx);
++            return manifestUrl.TrimEnd('/');
++        }
++
++        private List<InstalledAddon> LoadFromSettings()
++        {
++            try
++            {
++                var local = ApplicationData.Current.LocalSettings;
++                if (local.Values.TryGetValue("InstalledAddons", out var raw) && raw is string json
++                    && !string.IsNullOrWhiteSpace(json))
++                {
++                    return JsonSerializer.Deserialize<List<InstalledAddon>>(json, StorageJson)
++                           ?? new List<InstalledAddon>();
++                }
++            }
++            catch
++            {
++                // ignore corrupt storage
++            }
++            return new List<InstalledAddon>();
++        }
++
++        private void SaveToSettings()
++        {
++            try
++            {
++                var json = JsonSerializer.Serialize(_addons, StorageJson);
++                ApplicationData.Current.LocalSettings.Values["InstalledAddons"] = json;
++            }
++            catch
++            {
++                // storage full / restricted — ignore for prototype
++            }
++        }
++    }
++}
+diff --git a/StreamioX.App/Services/CatalogService.cs b/StreamioX.App/Services/CatalogService.cs
+index 83c3715..9dc2852 100644
+--- a/StreamioX.App/Services/CatalogService.cs
++++ b/StreamioX.App/Services/CatalogService.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using System.Linq;
+ using System.Threading;
+ using System.Threading.Tasks;
+ using StreamioX.App.Models;
+@@ -9,10 +10,12 @@ namespace StreamioX.App.Services
+     public sealed class CatalogService : ICatalogService
+     {
+         private readonly StremioClient _stremioClient;
++        private readonly IAddonService _addonService;
+ 
+-        public CatalogService(StremioClient stremioClient)
++        public CatalogService(StremioClient stremioClient, IAddonService addonService)
+         {
+             _stremioClient = stremioClient ?? throw new ArgumentNullException(nameof(stremioClient));
++            _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
+         }
+ 
+         public async Task<IReadOnlyList<Movie>> GetCatalogAsync(
+@@ -32,5 +35,59 @@ namespace StreamioX.App.Services
+ 
+             return response?.Metas ?? Array.Empty<Movie>();
+         }
++
++        public async Task<IReadOnlyList<Movie>> GetFromInstalledAddonsAsync(
++            string type = "movie",
++            string? preferredCatalogId = null,
++            CancellationToken cancellationToken = default)
++        {
++            await _addonService.InitializeAsync(cancellationToken).ConfigureAwait(false);
++
++            var providers = _addonService.GetCatalogProviders(type);
++            var results = new List<Movie>();
++            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
++
++            foreach (var addon in providers)
++            {
++                var catalogs = addon.Catalogs
++                    .Where(c => string.IsNullOrEmpty(c.Type)
++                                || string.Equals(c.Type, type, StringComparison.OrdinalIgnoreCase))
++                    .ToList();
++
++                if (catalogs.Count == 0)
++                {
++                    // Fallback common ids
++                    catalogs.Add(new CatalogDescriptor { Type = type, Id = preferredCatalogId ?? "top" });
++                }
++
++                foreach (var catalog in catalogs)
++                {
++                    var catalogId = catalog.Id ?? preferredCatalogId ?? "top";
++                    try
++                    {
++                        var items = await GetCatalogAsync(addon.BaseUrl, type, catalogId, cancellationToken)
++                            .ConfigureAwait(false);
++                        foreach (var item in items)
++                        {
++                            if (item.Id != null && seen.Add(item.Id))
++                                results.Add(item);
++                        }
++                    }
++                    catch
++                    {
++                        // Skip failed addon, try next
++                    }
++
++                    // Prefer first successful catalog per addon for board-style feed
++                    if (results.Count > 0 && preferredCatalogId == null)
++                        break;
++                }
++
++                if (results.Count >= 50)
++                    break;
++            }
++
++            return results;
++        }
+     }
+ }
+diff --git a/StreamioX.App/Services/Interfaces/IAddonService.cs b/StreamioX.App/Services/Interfaces/IAddonService.cs
+new file mode 100644
+index 0000000..c21468a
+--- /dev/null
++++ b/StreamioX.App/Services/Interfaces/IAddonService.cs
+@@ -0,0 +1,22 @@
++using System.Collections.Generic;
++using System.Threading;
++using System.Threading.Tasks;
++using StreamioX.App.Models;
++
++namespace StreamioX.App.Services
++{
++    public interface IAddonService
++    {
++        IReadOnlyList<InstalledAddon> InstalledAddons { get; }
++
++        Task InitializeAsync(CancellationToken cancellationToken = default);
++
++        Task<InstalledAddon?> InstallFromManifestUrlAsync(string manifestUrl, CancellationToken cancellationToken = default);
++
++        Task UninstallAsync(string addonId);
++
++        IReadOnlyList<InstalledAddon> GetCatalogProviders(string? type = null);
++
++        IReadOnlyList<InstalledAddon> GetStreamProviders(string? type = null, string? contentId = null);
++    }
++}
+diff --git a/StreamioX.App/Services/Interfaces/ICatalogService.cs b/StreamioX.App/Services/Interfaces/ICatalogService.cs
+index 3e9da70..a4fa13c 100644
+--- a/StreamioX.App/Services/Interfaces/ICatalogService.cs
++++ b/StreamioX.App/Services/Interfaces/ICatalogService.cs
+@@ -12,5 +12,13 @@ namespace StreamioX.App.Services
+             string type,
+             string catalogId,
+             CancellationToken cancellationToken = default);
++
++        /// <summary>
++        /// Load catalogs from all installed catalog-providing addons for the given type.
++        /// </summary>
++        Task<IReadOnlyList<Movie>> GetFromInstalledAddonsAsync(
++            string type = "movie",
++            string? preferredCatalogId = null,
++            CancellationToken cancellationToken = default);
+     }
+ }
+diff --git a/StreamioX.App/Services/Interfaces/IStreamService.cs b/StreamioX.App/Services/Interfaces/IStreamService.cs
+index 5aafe64..75941d7 100644
+--- a/StreamioX.App/Services/Interfaces/IStreamService.cs
++++ b/StreamioX.App/Services/Interfaces/IStreamService.cs
+@@ -12,5 +12,13 @@ namespace StreamioX.App.Services
+             string type,
+             string id,
+             CancellationToken cancellationToken = default);
++
++        /// <summary>
++        /// Aggregate streams from all installed stream-providing addons.
++        /// </summary>
++        Task<IReadOnlyList<StreamSource>> GetFromInstalledAddonsAsync(
++            string type,
++            string id,
++            CancellationToken cancellationToken = default);
+     }
+ }
+diff --git a/StreamioX.App/Services/StreamService.cs b/StreamioX.App/Services/StreamService.cs
+index 511f0a3..b46c29d 100644
+--- a/StreamioX.App/Services/StreamService.cs
++++ b/StreamioX.App/Services/StreamService.cs
+@@ -9,10 +9,12 @@ namespace StreamioX.App.Services
+     public sealed class StreamService : IStreamService
+     {
+         private readonly StremioClient _stremioClient;
++        private readonly IAddonService _addonService;
+ 
+-        public StreamService(StremioClient stremioClient)
++        public StreamService(StremioClient stremioClient, IAddonService addonService)
+         {
+             _stremioClient = stremioClient ?? throw new ArgumentNullException(nameof(stremioClient));
++            _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
+         }
+ 
+         public async Task<IReadOnlyList<StreamSource>> GetStreamsAsync(
+@@ -32,5 +34,32 @@ namespace StreamioX.App.Services
+ 
+             return response?.Streams ?? Array.Empty<StreamSource>();
+         }
++
++        public async Task<IReadOnlyList<StreamSource>> GetFromInstalledAddonsAsync(
++            string type,
++            string id,
++            CancellationToken cancellationToken = default)
++        {
++            await _addonService.InitializeAsync(cancellationToken).ConfigureAwait(false);
++
++            var providers = _addonService.GetStreamProviders(type, id);
++            var results = new List<StreamSource>();
++
++            foreach (var addon in providers)
++            {
++                try
++                {
++                    var streams = await GetStreamsAsync(addon.BaseUrl, type, id, cancellationToken)
++                        .ConfigureAwait(false);
++                    results.AddRange(streams);
++                }
++                catch
++                {
++                    // Skip failed provider
++                }
++            }
++
++            return results;
++        }
+     }
+ }
+diff --git a/StreamioX.App/ViewModels/AddonsViewModel.cs b/StreamioX.App/ViewModels/AddonsViewModel.cs
+index af0b8b6..7be9a6c 100644
+--- a/StreamioX.App/ViewModels/AddonsViewModel.cs
++++ b/StreamioX.App/ViewModels/AddonsViewModel.cs
+@@ -1,10 +1,121 @@
+-﻿using System;
+-using System.Collections.Generic;
+-using System.Text;
++using CommunityToolkit.Mvvm.ComponentModel;
++using CommunityToolkit.Mvvm.Input;
++using System;
++using System.Collections.ObjectModel;
++using System.Threading.Tasks;
++using StreamioX.App.Models;
++using StreamioX.App.Services;
+ 
+ namespace StreamioX.App.ViewModels
+ {
+-    internal class AddonsViewModel
++    public partial class AddonsViewModel : ObservableObject
+     {
++        private readonly IAddonService _addonService;
++
++        [ObservableProperty]
++        private ObservableCollection<InstalledAddon> addons = new();
++
++        [ObservableProperty]
++        private string? manifestUrlInput;
++
++        [ObservableProperty]
++        private bool isBusy;
++
++        [ObservableProperty]
++        private string? statusMessage;
++
++        public AddonsViewModel(IAddonService addonService)
++        {
++            _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
++        }
++
++        [RelayCommand]
++        public async Task LoadAsync()
++        {
++            IsBusy = true;
++            StatusMessage = null;
++            try
++            {
++                await _addonService.InitializeAsync();
++                RefreshList();
++            }
++            catch (Exception ex)
++            {
++                StatusMessage = $"Load failed: {ex.Message}";
++            }
++            finally
++            {
++                IsBusy = false;
++            }
++        }
++
++        [RelayCommand]
++        public async Task InstallAsync()
++        {
++            if (string.IsNullOrWhiteSpace(ManifestUrlInput))
++            {
++                StatusMessage = "Enter an addon manifest URL.";
++                return;
++            }
++
++            IsBusy = true;
++            StatusMessage = null;
++            try
++            {
++                var addon = await _addonService.InstallFromManifestUrlAsync(ManifestUrlInput.Trim());
++                if (addon == null)
++                {
++                    StatusMessage = "Could not install addon. Check the URL.";
++                }
++                else
++                {
++                    StatusMessage = $"Installed: {addon.Name}";
++                    ManifestUrlInput = string.Empty;
++                    RefreshList();
++                }
++            }
++            catch (Exception ex)
++            {
++                StatusMessage = $"Install failed: {ex.Message}";
++            }
++            finally
++            {
++                IsBusy = false;
++            }
++        }
++
++        [RelayCommand]
++        public async Task UninstallAsync(InstalledAddon? addon)
++        {
++            if (addon == null) return;
++            if (addon.IsOfficial)
++            {
++                StatusMessage = "Cannot remove the official Cinemeta addon.";
++                return;
++            }
++
++            IsBusy = true;
++            try
++            {
++                await _addonService.UninstallAsync(addon.Id);
++                StatusMessage = $"Removed: {addon.Name}";
++                RefreshList();
++            }
++            catch (Exception ex)
++            {
++                StatusMessage = $"Remove failed: {ex.Message}";
++            }
++            finally
++            {
++                IsBusy = false;
++            }
++        }
++
++        private void RefreshList()
++        {
++            Addons.Clear();
++            foreach (var a in _addonService.InstalledAddons)
++                Addons.Add(a);
++        }
+     }
+ }
+diff --git a/StreamioX.App/ViewModels/DetailsViewModel.cs b/StreamioX.App/ViewModels/DetailsViewModel.cs
+index 910919f..2b8a94b 100644
+--- a/StreamioX.App/ViewModels/DetailsViewModel.cs
++++ b/StreamioX.App/ViewModels/DetailsViewModel.cs
+@@ -14,6 +14,7 @@ namespace StreamioX.App.ViewModels
+     {
+         private readonly IStreamService _streamService;
+         private readonly INavigationService _navigationService;
++        private readonly IAddonService _addonService;
+         private CancellationTokenSource? _loadCts;
+ 
+         [ObservableProperty]
+@@ -28,10 +29,14 @@ namespace StreamioX.App.ViewModels
+         [ObservableProperty]
+         private string? errorMessage;
+ 
+-        public DetailsViewModel(IStreamService streamService, INavigationService navigationService)
++        public DetailsViewModel(
++            IStreamService streamService,
++            INavigationService navigationService,
++            IAddonService addonService)
+         {
+             _streamService = streamService ?? throw new ArgumentNullException(nameof(streamService));
+             _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
++            _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
+         }
+ 
+         public async Task InitializeAsync(Movie movie)
+@@ -54,17 +59,20 @@ namespace StreamioX.App.ViewModels
+ 
+             try
+             {
+-                string addonUrl = "https://v3-cinemeta.strem.fun";
+-                var fetchedStreams = await _streamService.GetStreamsAsync(
+-                    addonUrl,
+-                    SelectedMovie.Type ?? "movie",
+-                    SelectedMovie.Id ?? string.Empty,
+-                    token);
+-
+-                foreach (var stream in fetchedStreams)
+-                {
++                await _addonService.InitializeAsync(token).ConfigureAwait(true);
++
++                var type = SelectedMovie.Type ?? "movie";
++                var id = SelectedMovie.Id ?? string.Empty;
++
++                var fetched = await _streamService
++                    .GetFromInstalledAddonsAsync(type, id, token)
++                    .ConfigureAwait(true);
++
++                foreach (var stream in fetched)
+                     Streams.Add(stream);
+-                }
++
++                if (Streams.Count == 0)
++                    ErrorMessage = "No streams found. Install a stream addon that supports this title.";
+             }
+             catch (OperationCanceledException)
+             {
+diff --git a/StreamioX.App/ViewModels/DiscoverViewModel.cs b/StreamioX.App/ViewModels/DiscoverViewModel.cs
+index 0e2ebf5..2e0343e 100644
+--- a/StreamioX.App/ViewModels/DiscoverViewModel.cs
++++ b/StreamioX.App/ViewModels/DiscoverViewModel.cs
+@@ -12,6 +12,7 @@ namespace StreamioX.App.ViewModels
+     public partial class DiscoverViewModel : ObservableObject
+     {
+         private readonly ICatalogService _catalogService;
++        private readonly IAddonService _addonService;
+         private CancellationTokenSource? _loadCts;
+ 
+         [ObservableProperty]
+@@ -23,15 +24,14 @@ namespace StreamioX.App.ViewModels
+         [ObservableProperty]
+         private string? errorMessage;
+ 
+-        public string DefaultAddonUrl { get; set; } = "https://cinemeta-stremio.strem.fun";
+-
+-        public DiscoverViewModel(ICatalogService catalogService)
++        public DiscoverViewModel(ICatalogService catalogService, IAddonService addonService)
+         {
+             _catalogService = catalogService ?? throw new ArgumentNullException(nameof(catalogService));
++            _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
+         }
+ 
+         [RelayCommand]
+-        public async Task LoadCatalogAsync(string? addonUrl = null)
++        public async Task LoadCatalogAsync()
+         {
+             if (IsLoading) return;
+ 
+@@ -44,18 +44,21 @@ namespace StreamioX.App.ViewModels
+ 
+             try
+             {
+-                string targetUrl = string.IsNullOrWhiteSpace(addonUrl) ? DefaultAddonUrl : addonUrl;
+-                var items = await _catalogService.GetCatalogAsync(targetUrl, "movie", "top", token);
++                await _addonService.InitializeAsync(token).ConfigureAwait(true);
++
++                var items = await _catalogService
++                    .GetFromInstalledAddonsAsync("movie", "top", token)
++                    .ConfigureAwait(true);
+ 
+                 Movies.Clear();
+                 foreach (var item in items)
+-                {
+                     Movies.Add(item);
+-                }
++
++                if (Movies.Count == 0)
++                    ErrorMessage = "No catalog results. Install a catalog addon (e.g. Cinemeta).";
+             }
+             catch (OperationCanceledException)
+             {
+-                // Expected on navigation away
+             }
+             catch (Exception ex)
+             {
+diff --git a/StreamioX.App/Views/AddonsPage.xaml b/StreamioX.App/Views/AddonsPage.xaml
+index 5ccc3ca..5cef52c 100644
+--- a/StreamioX.App/Views/AddonsPage.xaml
++++ b/StreamioX.App/Views/AddonsPage.xaml
+@@ -1,9 +1,64 @@
+-﻿<Page
++<Page
+     x:Class="StreamioX.App.Views.AddonsPage"
+     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+-    Background="#05060A">
+-    <Grid>
+-        <TextBlock Text="Addons Page" Foreground="White" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
++    xmlns:models="using:StreamioX.App.Models"
++    Background="#05060A"
++    x:Name="RootPage">
++
++    <Grid Padding="48,32">
++        <Grid.RowDefinitions>
++            <RowDefinition Height="Auto"/>
++            <RowDefinition Height="Auto"/>
++            <RowDefinition Height="*"/>
++            <RowDefinition Height="Auto"/>
++        </Grid.RowDefinitions>
++
++        <TextBlock Text="Stremio Addons"
++                   Foreground="White"
++                   FontSize="32"
++                   FontWeight="SemiBold"
++                   Margin="0,0,0,24"/>
++
++        <StackPanel Grid.Row="1" Orientation="Horizontal"   Margin="0,0,0,24">
++            <TextBox x:Name="ManifestUrlBox"
++                     PlaceholderText="https://v3-cinemeta.strem.io/manifest.json"
++                     Width="560"
++                     Text="{x:Bind ViewModel.ManifestUrlInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
++            <Button Content="Install" Click="Install_Click"/>
++            <Button Content="Refresh" Click="Refresh_Click"/>
++        </StackPanel>
++
++        <ListView x:Name="AddonsList"
++                  Grid.Row="2"
++                  ItemsSource="{x:Bind ViewModel.Addons, Mode=OneWay}"
++                  SelectionMode="None">
++            <ListView.ItemTemplate>
++                <DataTemplate x:DataType="models:InstalledAddon">
++                    <Grid Padding="12,16" ColumnSpacing="16">
++                        <Grid.ColumnDefinitions>
++                            <ColumnDefinition Width="*"/>
++                            <ColumnDefinition Width="Auto"/>
++                        </Grid.ColumnDefinitions>
++                        <StackPanel>
++                            <TextBlock Text="{x:Bind Name}" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
++                            <TextBlock Text="{x:Bind Description}" Foreground="#A0A0A0" TextWrapping="Wrap" MaxLines="2"/>
++                            <TextBlock Text="{x:Bind BaseUrl}" Foreground="#707070" FontSize="12" Margin="0,4,0,0"/>
++                        </StackPanel>
++                        <Button Grid.Column="1"
++                                Content="Remove"
++                                VerticalAlignment="Center"
++                                Click="Remove_Click"
++                                Tag="{x:Bind}"/>
++                    </Grid>
++                </DataTemplate>
++            </ListView.ItemTemplate>
++        </ListView>
++
++        <TextBlock Grid.Row="3"
++                   Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
++                   Foreground="#FFB74D"
++                   Margin="0,16,0,0"
++                   TextWrapping="Wrap"/>
+     </Grid>
+-</Page>
+\ No newline at end of file
++</Page>
+diff --git a/StreamioX.App/Views/AddonsPage.xaml.cs b/StreamioX.App/Views/AddonsPage.xaml.cs
+index 3d09c4a..e3c9218 100644
+--- a/StreamioX.App/Views/AddonsPage.xaml.cs
++++ b/StreamioX.App/Views/AddonsPage.xaml.cs
+@@ -1,30 +1,45 @@
+-﻿using System;
+-using System.Collections.Generic;
+-using System.IO;
+-using System.Linq;
+-using System.Runtime.InteropServices.WindowsRuntime;
+-using Windows.Foundation;
+-using Windows.Foundation.Collections;
++using StreamioX.App.Models;
++using StreamioX.App.ViewModels;
+ using Windows.UI.Xaml;
+ using Windows.UI.Xaml.Controls;
+-using Windows.UI.Xaml.Controls.Primitives;
+-using Windows.UI.Xaml.Data;
+-using Windows.UI.Xaml.Input;
+-using Windows.UI.Xaml.Media;
+ using Windows.UI.Xaml.Navigation;
+ 
+-// The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=234238
+-
+ namespace StreamioX.App.Views
+ {
+-    /// <summary>
+-    /// An empty page that can be used on its own or navigated to within a Frame.
+-    /// </summary>
+     public sealed partial class AddonsPage : Page
+     {
++        public AddonsViewModel ViewModel { get; }
++
+         public AddonsPage()
+         {
+-            this.InitializeComponent();
++            InitializeComponent();
++            ViewModel = AppServices.GetRequiredService<AddonsViewModel>();
++            DataContext = ViewModel;
++        }
++
++        protected override async void OnNavigatedTo(NavigationEventArgs e)
++        {
++            base.OnNavigatedTo(e);
++            await ViewModel.LoadAsync();
++        }
++
++        private async void Install_Click(object sender, RoutedEventArgs e)
++        {
++            ViewModel.ManifestUrlInput = ManifestUrlBox.Text;
++            await ViewModel.InstallAsync();
++        }
++
++        private async void Refresh_Click(object sender, RoutedEventArgs e)
++        {
++            await ViewModel.LoadAsync();
++        }
++
++        private async void Remove_Click(object sender, RoutedEventArgs e)
++        {
++            if (sender is Button btn && btn.Tag is InstalledAddon addon)
++            {
++                await ViewModel.UninstallAsync(addon);
++            }
+         }
+     }
+ }
+-- 
+2.43.0
+
+
+From d3d96a8c716dc13023cb731f251839b64b2d4302 Mon Sep 17 00:00:00 2001
+From: lukeponga-dev <lukeponga-dev@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 01:47:56 +0000
+Subject: [PATCH 3/3] Add Stremio login with QR device-link flow
+
+- AuthService: link.stremio.com create/read, email login, authKey paste
+- Settings: QR image + 4-char code, poll until linked, logout
+- Persist authKey/user in LocalSettings
+---
+ StreamioX.App/App.xaml.cs                     |   1 +
+ StreamioX.App/AppServices.cs                  |  10 +
+ StreamioX.App/Models/AuthModels.cs            |  78 ++++++
+ StreamioX.App/Services/AuthService.cs         | 256 ++++++++++++++++++
+ .../Services/Interfaces/IAuthService.cs       |  21 ++
+ StreamioX.App/ViewModels/SettingsViewModel.cs | 174 +++++++++++-
+ StreamioX.App/Views/SettingsPage.xaml         |  79 ++++--
+ StreamioX.App/Views/SettingsPage.xaml.cs      |  29 ++
+ 8 files changed, 620 insertions(+), 28 deletions(-)
+ create mode 100644 StreamioX.App/Models/AuthModels.cs
+ create mode 100644 StreamioX.App/Services/AuthService.cs
+ create mode 100644 StreamioX.App/Services/Interfaces/IAuthService.cs
+
+diff --git a/StreamioX.App/App.xaml.cs b/StreamioX.App/App.xaml.cs
+index 005f75f..73808d8 100644
+--- a/StreamioX.App/App.xaml.cs
++++ b/StreamioX.App/App.xaml.cs
+@@ -24,6 +24,7 @@ namespace StreamioX.App
+         protected override void OnLaunched(LaunchActivatedEventArgs e)
+         {
+             // Warm up Stremio addon registry (installs Cinemeta on first run)
++            _ = AppServices.GetRequiredService<IAuthService>().InitializeAsync();
+             _ = AppServices.GetRequiredService<IAddonService>().InitializeAsync();
+ 
+             Frame rootFrame = Window.Current.Content as Frame;
+diff --git a/StreamioX.App/AppServices.cs b/StreamioX.App/AppServices.cs
+index a0755c8..3b4a62f 100644
+--- a/StreamioX.App/AppServices.cs
++++ b/StreamioX.App/AppServices.cs
+@@ -3,6 +3,7 @@ using StreamioX.App.Navigation;
+ using StreamioX.App.Services;
+ using StreamioX.App.ViewModels;
+ using System;
++using System.Net.Http;
+ 
+ namespace StreamioX.App
+ {
+@@ -25,7 +26,16 @@ namespace StreamioX.App
+                 client.DefaultRequestHeaders.UserAgent.ParseAdd("StreamioX/1.0 (Xbox; UWP)");
+             });
+ 
++            // Shared HttpClient for auth / link API
++            services.AddSingleton<HttpClient>(_ =>
++            {
++                var c = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
++                c.DefaultRequestHeaders.UserAgent.ParseAdd("StreamioX/1.0 (Xbox; UWP)");
++                return c;
++            });
++
+             services.AddSingleton<INavigationService, NavigationService>();
++            services.AddSingleton<IAuthService, AuthService>();
+             services.AddSingleton<IAddonService, AddonService>();
+             services.AddSingleton<ICatalogService, CatalogService>();
+             services.AddSingleton<IStreamService, StreamService>();
+diff --git a/StreamioX.App/Models/AuthModels.cs b/StreamioX.App/Models/AuthModels.cs
+new file mode 100644
+index 0000000..c4ca0c7
+--- /dev/null
++++ b/StreamioX.App/Models/AuthModels.cs
+@@ -0,0 +1,78 @@
++using System.Text.Json.Serialization;
++
++namespace StreamioX.App.Models
++{
++    public sealed class DeviceLinkSession
++    {
++        public string Code { get; set; } = string.Empty;
++        public string LinkUrl { get; set; } = string.Empty;
++        public string QrImageUrl { get; set; } = string.Empty;
++    }
++
++    public sealed class StremioUser
++    {
++        [JsonPropertyName("_id")]
++        public string? Id { get; set; }
++
++        [JsonPropertyName("email")]
++        public string? Email { get; set; }
++
++        [JsonPropertyName("avatar")]
++        public string? Avatar { get; set; }
++    }
++
++    public sealed class StremioApiEnvelope<T>
++    {
++        [JsonPropertyName("result")]
++        public T? Result { get; set; }
++
++        [JsonPropertyName("error")]
++        public StremioApiError? Error { get; set; }
++    }
++
++    public sealed class StremioApiError
++    {
++        [JsonPropertyName("code")]
++        public int Code { get; set; }
++
++        [JsonPropertyName("message")]
++        public string? Message { get; set; }
++    }
++
++    public sealed class DeviceLinkCreateResult
++    {
++        [JsonPropertyName("success")]
++        public bool Success { get; set; }
++
++        [JsonPropertyName("code")]
++        public string? Code { get; set; }
++
++        [JsonPropertyName("link")]
++        public string? Link { get; set; }
++
++        [JsonPropertyName("qrcode")]
++        public string? Qrcode { get; set; }
++    }
++
++    public sealed class DeviceLinkReadResult
++    {
++        [JsonPropertyName("authKey")]
++        public string? AuthKey { get; set; }
++
++        [JsonPropertyName("user")]
++        public StremioUser? User { get; set; }
++
++        // Some responses nest under result.result
++        [JsonPropertyName("result")]
++        public DeviceLinkReadResult? Nested { get; set; }
++    }
++
++    public sealed class LoginResult
++    {
++        [JsonPropertyName("authKey")]
++        public string? AuthKey { get; set; }
++
++        [JsonPropertyName("user")]
++        public StremioUser? User { get; set; }
++    }
++}
+diff --git a/StreamioX.App/Services/AuthService.cs b/StreamioX.App/Services/AuthService.cs
+new file mode 100644
+index 0000000..5db2a9f
+--- /dev/null
++++ b/StreamioX.App/Services/AuthService.cs
+@@ -0,0 +1,256 @@
++using System;
++using System.Net.Http;
++using System.Text;
++using System.Text.Json;
++using System.Threading;
++using System.Threading.Tasks;
++using StreamioX.App.Models;
++using Windows.Storage;
++
++namespace StreamioX.App.Services
++{
++    public sealed class AuthService : IAuthService
++    {
++        private const string AuthKeySetting = "StremioAuthKey";
++        private const string UserSetting = "StremioUserJson";
++        private const string ApiBase = "https://api.strem.io/api/";
++        private const string LinkCreateUrl = "https://link.stremio.com/api/v2/create?type=Create";
++
++        private static readonly JsonSerializerOptions JsonOptions = new()
++        {
++            PropertyNameCaseInsensitive = true
++        };
++
++        private readonly HttpClient _http;
++
++        public bool IsLoggedIn => !string.IsNullOrWhiteSpace(AuthKey);
++        public string? AuthKey { get; private set; }
++        public StremioUser? User { get; private set; }
++
++        public AuthService(HttpClient httpClient)
++        {
++            _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
++        }
++
++        public Task InitializeAsync()
++        {
++            try
++            {
++                var settings = ApplicationData.Current.LocalSettings.Values;
++                if (settings.TryGetValue(AuthKeySetting, out var keyObj) && keyObj is string key
++                    && !string.IsNullOrWhiteSpace(key))
++                {
++                    AuthKey = key;
++                }
++
++                if (settings.TryGetValue(UserSetting, out var userObj) && userObj is string userJson
++                    && !string.IsNullOrWhiteSpace(userJson))
++                {
++                    User = JsonSerializer.Deserialize<StremioUser>(userJson, JsonOptions);
++                }
++            }
++            catch
++            {
++                // ignore corrupt storage
++            }
++
++            return Task.CompletedTask;
++        }
++
++        public async Task<DeviceLinkSession> StartDeviceLinkAsync(CancellationToken cancellationToken = default)
++        {
++            using var response = await _http.GetAsync(LinkCreateUrl, cancellationToken).ConfigureAwait(false);
++            response.EnsureSuccessStatusCode();
++
++            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
++            var envelope = await JsonSerializer.DeserializeAsync<StremioApiEnvelope<DeviceLinkCreateResult>>(
++                stream, JsonOptions, cancellationToken).ConfigureAwait(false);
++
++            if (envelope?.Error != null)
++                throw new InvalidOperationException(envelope.Error.Message ?? "Failed to create link code");
++
++            var result = envelope?.Result
++                         ?? throw new InvalidOperationException("Empty link create response");
++
++            if (string.IsNullOrWhiteSpace(result.Code))
++                throw new InvalidOperationException("No link code returned");
++
++            var link = result.Link ?? $"https://link.stremio.com/{result.Code}";
++            var qr = result.Qrcode
++                     ?? $"https://api.qrserver.com/v1/create-qr-code/?size=280x280&data={Uri.EscapeDataString(link)}";
++
++            return new DeviceLinkSession
++            {
++                Code = result.Code!,
++                LinkUrl = link,
++                QrImageUrl = qr
++            };
++        }
++
++        public async Task<bool> PollDeviceLinkAsync(string code, CancellationToken cancellationToken = default)
++        {
++            if (string.IsNullOrWhiteSpace(code))
++                return false;
++
++            var url = $"https://link.stremio.com/api/v2/read?type=Read&code={Uri.EscapeDataString(code.ToUpperInvariant())}";
++
++            using var response = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
++            if (!response.IsSuccessStatusCode)
++                return false;
++
++            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
++            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken)
++                .ConfigureAwait(false);
++
++            if (doc.RootElement.TryGetProperty("error", out _))
++                return false;
++
++            string? authKey = null;
++            StremioUser? user = null;
++
++            if (doc.RootElement.TryGetProperty("result", out var resultEl))
++            {
++                // result may be the auth payload or nested
++                authKey = TryGetString(resultEl, "authKey");
++                if (resultEl.TryGetProperty("user", out var userEl))
++                    user = JsonSerializer.Deserialize<StremioUser>(userEl.GetRawText(), JsonOptions);
++
++                if (authKey == null && resultEl.TryGetProperty("result", out var nested))
++                {
++                    authKey = TryGetString(nested, "authKey");
++                    if (nested.TryGetProperty("user", out var nestedUser))
++                        user = JsonSerializer.Deserialize<StremioUser>(nestedUser.GetRawText(), JsonOptions);
++                }
++
++                // Sometimes authKey is the whole result as string? unlikely
++            }
++
++            if (string.IsNullOrWhiteSpace(authKey))
++                return false;
++
++            AuthKey = authKey;
++            User = user;
++            Persist();
++
++            if (User == null)
++            {
++                try { await RefreshUserAsync(cancellationToken).ConfigureAwait(false); }
++                catch { /* optional */ }
++            }
++
++            return true;
++        }
++
++        public async Task LoginWithEmailAsync(string email, string password, CancellationToken cancellationToken = default)
++        {
++            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
++                throw new ArgumentException("Email and password are required.");
++
++            var payload = new
++            {
++                type = "Login",
++                email,
++                password,
++                facebook = false
++            };
++
++            var result = await PostApiAsync<LoginResult>("login", payload, cancellationToken).ConfigureAwait(false);
++            if (string.IsNullOrWhiteSpace(result?.AuthKey))
++                throw new InvalidOperationException("Login failed: no auth key returned.");
++
++            AuthKey = result!.AuthKey;
++            User = result.User;
++            Persist();
++        }
++
++        public async Task LoginWithAuthKeyAsync(string authKey, CancellationToken cancellationToken = default)
++        {
++            if (string.IsNullOrWhiteSpace(authKey))
++                throw new ArgumentException("Auth key is required.");
++
++            AuthKey = authKey.Trim();
++            Persist();
++            await RefreshUserAsync(cancellationToken).ConfigureAwait(false);
++        }
++
++        public async Task LogoutAsync(CancellationToken cancellationToken = default)
++        {
++            if (!string.IsNullOrWhiteSpace(AuthKey))
++            {
++                try
++                {
++                    await PostApiAsync<object>("logout", new { type = "Logout", authKey = AuthKey }, cancellationToken)
++                        .ConfigureAwait(false);
++                }
++                catch
++                {
++                    // still clear local session
++                }
++            }
++
++            AuthKey = null;
++            User = null;
++            ClearPersist();
++        }
++
++        public async Task RefreshUserAsync(CancellationToken cancellationToken = default)
++        {
++            if (string.IsNullOrWhiteSpace(AuthKey))
++                return;
++
++            var user = await PostApiAsync<StremioUser>("getUser", new { type = "GetUser", authKey = AuthKey }, cancellationToken)
++                .ConfigureAwait(false);
++            if (user != null)
++            {
++                User = user;
++                Persist();
++            }
++        }
++
++        private async Task<T?> PostApiAsync<T>(string method, object body, CancellationToken cancellationToken)
++        {
++            var json = JsonSerializer.Serialize(body, JsonOptions);
++            using var content = new StringContent(json, Encoding.UTF8, "application/json");
++            using var response = await _http.PostAsync(ApiBase + method, content, cancellationToken)
++                .ConfigureAwait(false);
++            response.EnsureSuccessStatusCode();
++
++            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
++            var envelope = await JsonSerializer.DeserializeAsync<StremioApiEnvelope<T>>(stream, JsonOptions, cancellationToken)
++                .ConfigureAwait(false);
++
++            if (envelope?.Error != null)
++                throw new InvalidOperationException(envelope.Error.Message ?? "API error");
++
++            return envelope is null ? default : envelope.Result;
++        }
++
++        private void Persist()
++        {
++            var settings = ApplicationData.Current.LocalSettings.Values;
++            if (AuthKey != null)
++                settings[AuthKeySetting] = AuthKey;
++            else
++                settings.Remove(AuthKeySetting);
++
++            if (User != null)
++                settings[UserSetting] = JsonSerializer.Serialize(User, JsonOptions);
++            else
++                settings.Remove(UserSetting);
++        }
++
++        private void ClearPersist()
++        {
++            var settings = ApplicationData.Current.LocalSettings.Values;
++            settings.Remove(AuthKeySetting);
++            settings.Remove(UserSetting);
++        }
++
++        private static string? TryGetString(JsonElement el, string name)
++        {
++            if (el.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String)
++                return p.GetString();
++            return null;
++        }
++    }
++}
+diff --git a/StreamioX.App/Services/Interfaces/IAuthService.cs b/StreamioX.App/Services/Interfaces/IAuthService.cs
+new file mode 100644
+index 0000000..a4e8042
+--- /dev/null
++++ b/StreamioX.App/Services/Interfaces/IAuthService.cs
+@@ -0,0 +1,21 @@
++using System.Threading;
++using System.Threading.Tasks;
++using StreamioX.App.Models;
++
++namespace StreamioX.App.Services
++{
++    public interface IAuthService
++    {
++        bool IsLoggedIn { get; }
++        string? AuthKey { get; }
++        StremioUser? User { get; }
++
++        Task InitializeAsync();
++        Task<DeviceLinkSession> StartDeviceLinkAsync(CancellationToken cancellationToken = default);
++        Task<bool> PollDeviceLinkAsync(string code, CancellationToken cancellationToken = default);
++        Task LoginWithEmailAsync(string email, string password, CancellationToken cancellationToken = default);
++        Task LoginWithAuthKeyAsync(string authKey, CancellationToken cancellationToken = default);
++        Task LogoutAsync(CancellationToken cancellationToken = default);
++        Task RefreshUserAsync(CancellationToken cancellationToken = default);
++    }
++}
+diff --git a/StreamioX.App/ViewModels/SettingsViewModel.cs b/StreamioX.App/ViewModels/SettingsViewModel.cs
+index d1c750e..0f6d0cc 100644
+--- a/StreamioX.App/ViewModels/SettingsViewModel.cs
++++ b/StreamioX.App/ViewModels/SettingsViewModel.cs
+@@ -1,14 +1,20 @@
+ using CommunityToolkit.Mvvm.ComponentModel;
+ using CommunityToolkit.Mvvm.Input;
+ using System;
++using System.Threading;
++using System.Threading.Tasks;
++using StreamioX.App.Services;
+ using Windows.System;
+ using Windows.UI.Xaml;
++using Windows.UI.Xaml.Media.Imaging;
+ 
+ namespace StreamioX.App.ViewModels
+ {
+     public partial class SettingsViewModel : ObservableObject
+     {
++        private readonly IAuthService _authService;
+         private DispatcherTimer? _telemetryTimer;
++        private CancellationTokenSource? _pollCts;
+ 
+         [ObservableProperty]
+         private string appVersionDisplay = "Version 1.0.0-alpha";
+@@ -25,17 +31,172 @@ namespace StreamioX.App.ViewModels
+         [ObservableProperty]
+         private bool hardwareAccelerationEnabled = true;
+ 
+-        public SettingsViewModel()
++        [ObservableProperty]
++        private bool isLoggedIn;
++
++        [ObservableProperty]
++        private string accountLabel = "Not signed in";
++
++        [ObservableProperty]
++        private string? linkCode;
++
++        [ObservableProperty]
++        private string? linkUrl;
++
++        [ObservableProperty]
++        private BitmapImage? qrImage;
++
++        [ObservableProperty]
++        private bool isLinking;
++
++        [ObservableProperty]
++        private string? authStatusMessage;
++
++        [ObservableProperty]
++        private string? emailInput;
++
++        [ObservableProperty]
++        private string? passwordInput;
++
++        [ObservableProperty]
++        private string? authKeyInput;
++
++        public SettingsViewModel(IAuthService authService)
+         {
++            _authService = authService;
+             StartTelemetry();
++            _ = InitAuthAsync();
+         }
+ 
+-        private void StartTelemetry()
++        private async Task InitAuthAsync()
++        {
++            await _authService.InitializeAsync();
++            UpdateAccountUi();
++        }
++
++        private void UpdateAccountUi()
+         {
+-            _telemetryTimer = new DispatcherTimer
++            IsLoggedIn = _authService.IsLoggedIn;
++            AccountLabel = IsLoggedIn
++                ? (_authService.User?.Email ?? "Signed in")
++                : "Not signed in";
++        }
++
++        [RelayCommand]
++        private async Task StartQrLoginAsync()
++        {
++            _pollCts?.Cancel();
++            _pollCts = new CancellationTokenSource();
++            var token = _pollCts.Token;
++
++            IsLinking = true;
++            AuthStatusMessage = "Creating link code…";
++            QrImage = null;
++            LinkCode = null;
++
++            try
++            {
++                var session = await _authService.StartDeviceLinkAsync(token);
++                LinkCode = session.Code;
++                LinkUrl = session.LinkUrl;
++                QrImage = new BitmapImage(new Uri(session.QrImageUrl));
++                AuthStatusMessage = $"Scan QR or open link.stremio.com and enter code {session.Code}";
++
++                // Poll until linked or cancelled
++                while (!token.IsCancellationRequested)
++                {
++                    await Task.Delay(2500, token);
++                    var ok = await _authService.PollDeviceLinkAsync(session.Code, token);
++                    if (ok)
++                    {
++                        AuthStatusMessage = "Signed in successfully.";
++                        UpdateAccountUi();
++                        IsLinking = false;
++                        return;
++                    }
++                }
++            }
++            catch (OperationCanceledException)
+             {
+-                Interval = TimeSpan.FromSeconds(1)
+-            };
++                AuthStatusMessage = "Link cancelled.";
++            }
++            catch (Exception ex)
++            {
++                AuthStatusMessage = $"Link failed: {ex.Message}";
++            }
++            finally
++            {
++                IsLinking = false;
++            }
++        }
++
++        [RelayCommand]
++        private void CancelQrLogin()
++        {
++            _pollCts?.Cancel();
++            IsLinking = false;
++            AuthStatusMessage = "Cancelled.";
++        }
++
++        [RelayCommand]
++        private async Task LoginEmailAsync()
++        {
++            if (string.IsNullOrWhiteSpace(EmailInput) || string.IsNullOrWhiteSpace(PasswordInput))
++            {
++                AuthStatusMessage = "Enter email and password.";
++                return;
++            }
++
++            AuthStatusMessage = "Signing in…";
++            try
++            {
++                await _authService.LoginWithEmailAsync(EmailInput.Trim(), PasswordInput);
++                PasswordInput = string.Empty;
++                AuthStatusMessage = "Signed in.";
++                UpdateAccountUi();
++            }
++            catch (Exception ex)
++            {
++                AuthStatusMessage = $"Login failed: {ex.Message}";
++            }
++        }
++
++        [RelayCommand]
++        private async Task LoginAuthKeyAsync()
++        {
++            if (string.IsNullOrWhiteSpace(AuthKeyInput))
++            {
++                AuthStatusMessage = "Paste an auth key.";
++                return;
++            }
++
++            try
++            {
++                await _authService.LoginWithAuthKeyAsync(AuthKeyInput.Trim());
++                AuthKeyInput = string.Empty;
++                AuthStatusMessage = "Signed in with auth key.";
++                UpdateAccountUi();
++            }
++            catch (Exception ex)
++            {
++                AuthStatusMessage = $"Auth key failed: {ex.Message}";
++            }
++        }
++
++        [RelayCommand]
++        private async Task LogoutAsync()
++        {
++            _pollCts?.Cancel();
++            await _authService.LogoutAsync();
++            UpdateAccountUi();
++            QrImage = null;
++            LinkCode = null;
++            AuthStatusMessage = "Signed out.";
++        }
++
++        private void StartTelemetry()
++        {
++            _telemetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+             _telemetryTimer.Tick += (_, _) => UpdateMemoryStats();
+             _telemetryTimer.Start();
+             UpdateMemoryStats();
+@@ -45,7 +206,6 @@ namespace StreamioX.App.ViewModels
+         {
+             double usageMB = MemoryManager.AppMemoryUsage / 1024.0 / 1024.0;
+             double limitMB = MemoryManager.AppMemoryUsageLimit / 1024.0 / 1024.0;
+-
+             CurrentMemoryUsage = $"{usageMB:F2} MB";
+             SystemHardLimit = $"{limitMB:F2} MB";
+             MemoryPercentage = limitMB > 0 ? (usageMB / limitMB) * 100 : 0;
+@@ -54,7 +214,7 @@ namespace StreamioX.App.ViewModels
+         [RelayCommand]
+         private void ClearImageCache()
+         {
+-            // TODO: Implement cache clearing logic
++            // TODO
+         }
+     }
+ }
+diff --git a/StreamioX.App/Views/SettingsPage.xaml b/StreamioX.App/Views/SettingsPage.xaml
+index 58ce9d6..82e15bc 100644
+--- a/StreamioX.App/Views/SettingsPage.xaml
++++ b/StreamioX.App/Views/SettingsPage.xaml
+@@ -1,4 +1,4 @@
+-﻿<Page
++<Page
+     x:Class="StreamioX.App.Views.SettingsPage"
+     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+@@ -11,30 +11,67 @@
+             <RowDefinition Height="*"/>
+         </Grid.RowDefinitions>
+ 
+-        <TextBlock Text="Settings" Foreground="{StaticResource TextPrimaryBrush}" FontSize="36" FontWeight="SemiBold" Margin="0,0,0,32"/>
++        <TextBlock Text="Settings" Foreground="White" FontSize="36" FontWeight="SemiBold" Margin="0,0,0,32"/>
+ 
+         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+-            <StackPanel Spacing="32" MaxWidth="800" HorizontalAlignment="Left">
+-                <StackPanel Spacing="16">
+-                    <TextBlock Text="Diagnostics" Foreground="{StaticResource FocusAccentBrush}" FontSize="20" FontWeight="SemiBold"/>
+-                    <Grid Background="{StaticResource SurfaceBrush}" CornerRadius="8" Padding="24">
+-                        <StackPanel Spacing="12">
+-                            <StackPanel Orientation="Horizontal" Spacing="16">
+-                                <TextBlock Text="System Hard Limit:" Foreground="{StaticResource TextSecondaryBrush}" Width="180"/>
+-                                <TextBlock Text="{Binding SystemHardLimit}" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold"/>
+-                            </StackPanel>
+-                            <StackPanel Orientation="Horizontal" Spacing="16">
+-                                <TextBlock Text="Current Allocation:" Foreground="{StaticResource TextSecondaryBrush}" Width="180"/>
+-                                <TextBlock Text="{Binding CurrentMemoryUsage}" Foreground="{StaticResource FocusAccentBrush}" FontWeight="SemiBold"/>
++            <StackPanel MaxWidth="900" HorizontalAlignment="Left">
++
++                <!-- Account / QR login -->
++                <TextBlock Text="Stremio Account" Foreground="#A78BFA" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"/>
++                <Grid Background="#1A1B26" CornerRadius="8" Padding="24" Margin="0,0,0,32">
++                    <StackPanel>
++                        <TextBlock Text="{x:Bind ViewModel.AccountLabel, Mode=OneWay}" Foreground="White" FontSize="18" Margin="0,0,0,16"/>
++
++                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
++                            <Button Content="Sign in with QR" Click="StartQr_Click" Margin="0,0,12,0"/>
++                            <Button Content="Cancel" Click="CancelQr_Click" Margin="0,0,12,0"/>
++                            <Button Content="Sign out" Click="Logout_Click"/>
++                        </StackPanel>
++
++                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
++                            <Image Width="200" Height="200" Source="{x:Bind ViewModel.QrImage, Mode=OneWay}" Stretch="Uniform" Margin="0,0,24,0"/>
++                            <StackPanel VerticalAlignment="Center">
++                                <TextBlock Text="Code" Foreground="#888" FontSize="14"/>
++                                <TextBlock Text="{x:Bind ViewModel.LinkCode, Mode=OneWay}" Foreground="White" FontSize="40" FontWeight="Bold" Margin="0,4,0,12"/>
++                                <TextBlock Text="{x:Bind ViewModel.LinkUrl, Mode=OneWay}" Foreground="#888" FontSize="14" TextWrapping="Wrap"/>
++                                <TextBlock Text="Scan the QR with your phone, or open the link and enter the code while logged into Stremio." Foreground="#AAA" FontSize="14" TextWrapping="Wrap" MaxWidth="400" Margin="0,12,0,0"/>
+                             </StackPanel>
+                         </StackPanel>
+-                    </Grid>
+-                </StackPanel>
+-                <StackPanel Spacing="8">
+-                    <TextBlock Text="StremioX for Xbox" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold"/>
+-                    <TextBlock Text="{Binding AppVersionDisplay}" Foreground="{StaticResource TextSecondaryBrush}"/>
+-                </StackPanel>
++
++                        <TextBlock Text="{x:Bind ViewModel.AuthStatusMessage, Mode=OneWay}" Foreground="#FFB74D" TextWrapping="Wrap" Margin="0,8,0,16"/>
++
++                        <TextBlock Text="Or email / password" Foreground="#888" Margin="0,8,0,8"/>
++                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
++                            <TextBox x:Name="EmailBox" Width="260" PlaceholderText="Email" Margin="0,0,8,0"/>
++                            <PasswordBox x:Name="PasswordBox" Width="200" PlaceholderText="Password" Margin="0,0,8,0"/>
++                            <Button Content="Sign in" Click="EmailLogin_Click"/>
++                        </StackPanel>
++
++                        <TextBlock Text="Or paste auth key (from web.stremio.com profile)" Foreground="#888" Margin="0,12,0,8"/>
++                        <StackPanel Orientation="Horizontal">
++                            <TextBox x:Name="AuthKeyBox" Width="480" PlaceholderText="authKey" Margin="0,0,8,0"/>
++                            <Button Content="Use key" Click="AuthKeyLogin_Click"/>
++                        </StackPanel>
++                    </StackPanel>
++                </Grid>
++
++                <TextBlock Text="Diagnostics" Foreground="#A78BFA" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"/>
++                <Grid Background="#1A1B26" CornerRadius="8" Padding="24" Margin="0,0,0,24">
++                    <StackPanel>
++                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
++                            <TextBlock Text="System Hard Limit:" Foreground="#888" Width="180"/>
++                            <TextBlock Text="{x:Bind ViewModel.SystemHardLimit, Mode=OneWay}" Foreground="White" FontWeight="SemiBold"/>
++                        </StackPanel>
++                        <StackPanel Orientation="Horizontal">
++                            <TextBlock Text="Current Allocation:" Foreground="#888" Width="180"/>
++                            <TextBlock Text="{x:Bind ViewModel.CurrentMemoryUsage, Mode=OneWay}" Foreground="#A78BFA" FontWeight="SemiBold"/>
++                        </StackPanel>
++                    </StackPanel>
++                </Grid>
++
++                <TextBlock Text="StremioX for Xbox" Foreground="White" FontWeight="SemiBold"/>
++                <TextBlock Text="{x:Bind ViewModel.AppVersionDisplay, Mode=OneWay}" Foreground="#888"/>
+             </StackPanel>
+         </ScrollViewer>
+     </Grid>
+-</Page>
+\ No newline at end of file
++</Page>
+diff --git a/StreamioX.App/Views/SettingsPage.xaml.cs b/StreamioX.App/Views/SettingsPage.xaml.cs
+index d7203e2..f827102 100644
+--- a/StreamioX.App/Views/SettingsPage.xaml.cs
++++ b/StreamioX.App/Views/SettingsPage.xaml.cs
+@@ -1,4 +1,5 @@
+ using StreamioX.App.ViewModels;
++using Windows.UI.Xaml;
+ using Windows.UI.Xaml.Controls;
+ 
+ namespace StreamioX.App.Views
+@@ -13,5 +14,33 @@ namespace StreamioX.App.Views
+             ViewModel = AppServices.GetRequiredService<SettingsViewModel>();
+             DataContext = ViewModel;
+         }
++
++        private async void StartQr_Click(object sender, RoutedEventArgs e)
++        {
++            await ViewModel.StartQrLoginCommand.ExecuteAsync(null);
++        }
++
++        private void CancelQr_Click(object sender, RoutedEventArgs e)
++        {
++            ViewModel.CancelQrLoginCommand.Execute(null);
++        }
++
++        private async void Logout_Click(object sender, RoutedEventArgs e)
++        {
++            await ViewModel.LogoutCommand.ExecuteAsync(null);
++        }
++
++        private async void EmailLogin_Click(object sender, RoutedEventArgs e)
++        {
++            ViewModel.EmailInput = EmailBox.Text;
++            ViewModel.PasswordInput = PasswordBox.Password;
++            await ViewModel.LoginEmailCommand.ExecuteAsync(null);
++        }
++
++        private async void AuthKeyLogin_Click(object sender, RoutedEventArgs e)
++        {
++            ViewModel.AuthKeyInput = AuthKeyBox.Text;
++            await ViewModel.LoginAuthKeyCommand.ExecuteAsync(null);
++        }
+     }
+ }
+-- 
+2.43.0
+
