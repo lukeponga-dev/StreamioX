@@ -1,135 +1,73 @@
-﻿
 using CommunityToolkit.Mvvm.ComponentModel;
-using StreamioX.App.Models;
-using StreamioX.App.Services;
+using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.ObjectModel;
+using System.Threading;
 using System.Threading.Tasks;
-using WinRT;
+using StreamioX.App.Models;
+using StreamioX.App.Services;
 
 namespace StreamioX.App.ViewModels
 {
-    [GeneratedBindableCustomProperty]
     public partial class DiscoverViewModel : ObservableObject
     {
         private readonly ICatalogService _catalogService;
+        private readonly IAddonService _addonService;
+        private CancellationTokenSource? _loadCts;
 
         [ObservableProperty]
-        public partial ObservableCollection<Movie> Movies { get; set; }
+        private ObservableCollection<Movie> movies = new();
 
         [ObservableProperty]
-        public partial bool IsLoading { get; set; }
+        private bool isLoading;
 
         [ObservableProperty]
-        public partial string? ErrorMessage { get; set; }
+        private string? errorMessage;
 
-        public string DefaultAddonUrl { get; set; } =
-            "https://v3-cinemeta.strem.io";
-
-        public DiscoverViewModel(ICatalogService catalogService)
+        public DiscoverViewModel(ICatalogService catalogService, IAddonService addonService)
         {
-            _catalogService = catalogService
-                ?? throw new ArgumentNullException(nameof(catalogService));
-
-            Movies = new ObservableCollection<Movie>();
+            _catalogService = catalogService ?? throw new ArgumentNullException(nameof(catalogService));
+            _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
         }
 
-        public async Task LoadCatalogAsync(string? addonUrl = null)
+        [RelayCommand]
+        public async Task LoadCatalogAsync()
         {
-            if (IsLoading)
-                return;
+            if (IsLoading) return;
+
+            _loadCts?.Cancel();
+            _loadCts = new CancellationTokenSource();
+            var token = _loadCts.Token;
 
             IsLoading = true;
             ErrorMessage = null;
 
             try
             {
-                string targetUrl = string.IsNullOrWhiteSpace(addonUrl)
-                    ? DefaultAddonUrl
-                    : addonUrl.Trim();
+                await _addonService.InitializeAsync(token).ConfigureAwait(true);
+
+                var items = await _catalogService
+                    .GetFromInstalledAddonsAsync("movie", "top", token)
+                    .ConfigureAwait(true);
 
                 Movies.Clear();
-
-                try
-                {
-                    var movieItems = await _catalogService.GetCatalogAsync(
-                        targetUrl, "movie", "top");
-
-                    foreach (var item in movieItems)
-                    {
-                        if (item == null ||
-                            string.IsNullOrWhiteSpace(item.Id))
-                            continue;
-
-                        item.Type = "movie";
-                        Movies.Add(item);
-                    }
-
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Discover] Movies received: {Movies.Count}");
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Discover] Movie request failed: {ex}");
-                }
-
-                int movieCount = Movies.Count;
-
-                try
-                {
-                    var seriesItems = await _catalogService.GetCatalogAsync(
-                        targetUrl, "series", "top");
-
-                    foreach (var item in seriesItems)
-                    {
-                        if (item == null ||
-                            string.IsNullOrWhiteSpace(item.Id))
-                            continue;
-
-                        item.Type = "series";
-                        Movies.Add(item);
-                    }
-
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Discover] Series received: {Movies.Count - movieCount}");
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Discover] Series request failed: {ex}");
-                }
+                foreach (var item in items)
+                    Movies.Add(item);
 
                 if (Movies.Count == 0)
-                {
-                    ErrorMessage = "No catalogue items were returned.";
-                }
+                    ErrorMessage = "No catalog results. Install a catalog addon (e.g. Cinemeta).";
+            }
+            catch (OperationCanceledException)
+            {
             }
             catch (Exception ex)
             {
-                ErrorMessage = "Unable to load the catalogue.";
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Discover] Catalog error: {ex}");
+                ErrorMessage = $"Failed to load catalog: {ex.Message}";
             }
             finally
             {
                 IsLoading = false;
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[VM] Collection type: {Movies.GetType().FullName}");
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[VM] Collection count: {Movies.Count}");
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[VM] UI thread access: {Windows.UI.Xaml.Window.Current.Dispatcher.HasThreadAccess}");
             }
-        }
-
-        public async Task RefreshCatalogAsync()
-        {
-            await LoadCatalogAsync();
         }
     }
 }

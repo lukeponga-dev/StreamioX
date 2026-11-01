@@ -1,30 +1,45 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
+using StreamioX.App.Models;
+using StreamioX.App.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
-
-// The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=234238
 
 namespace StreamioX.App.Views
 {
-    /// <summary>
-    /// An empty page that can be used on its own or navigated to within a Frame.
-    /// </summary>
     public sealed partial class AddonsPage : Page
     {
+        public AddonsViewModel ViewModel { get; }
+
         public AddonsPage()
         {
-            this.InitializeComponent();
+            InitializeComponent();
+            ViewModel = AppServices.GetRequiredService<AddonsViewModel>();
+            DataContext = ViewModel;
+        }
+
+        protected override async void OnNavigatedTo(NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
+            await ViewModel.LoadAsync();
+        }
+
+        private async void Install_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.ManifestUrlInput = ManifestUrlBox.Text;
+            await ViewModel.InstallAsync();
+        }
+
+        private async void Refresh_Click(object sender, RoutedEventArgs e)
+        {
+            await ViewModel.LoadAsync();
+        }
+
+        private async void Remove_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is InstalledAddon addon)
+            {
+                await ViewModel.UninstallAsync(addon);
+            }
         }
     }
 }

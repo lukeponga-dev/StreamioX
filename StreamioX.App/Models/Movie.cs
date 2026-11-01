@@ -1,10 +1,12 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 using WinRT;
 
 namespace StreamioX.App.Models
 {
-    [GeneratedBindableCustomProperty]
-    public partial class Movie
+    /// <summary>
+    /// Represents a media item (Movie or Series) returned by a Stremio add-on catalog.
+    /// </summary>
+    public class Movie
     {
         [JsonPropertyName("id")]
         public string? Id { get; set; }

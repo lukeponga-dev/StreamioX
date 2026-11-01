@@ -1,5 +1,5 @@
-﻿using Windows.UI.Xaml.Controls;
 using StreamioX.App.ViewModels;
+using Windows.UI.Xaml.Controls;
 
 namespace StreamioX.App.Views
 {
@@ -9,9 +9,9 @@ namespace StreamioX.App.Views
 
         public LibraryPage()
         {
-            this.InitializeComponent();
-            ViewModel = new LibraryViewModel();
-            this.DataContext = ViewModel;
+            InitializeComponent();
+            ViewModel = AppServices.GetRequiredService<LibraryViewModel>();
+            DataContext = ViewModel;
         }
     }
 }

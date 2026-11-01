@@ -1,58 +1,40 @@
-﻿using System;
+using System;
 using System.Net.Http;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
-using StreamioX.App.Models;
 
 namespace StreamioX.App.Services
 {
-    public class StremioClient
+    /// <summary>
+    /// Handles low-level HTTP communication with Stremio add-on servers.
+    /// </summary>
+    public sealed class StremioClient
     {
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
         private readonly HttpClient _httpClient;
 
-        public StremioClient(HttpClient? httpClient = null)
+        public StremioClient(HttpClient httpClient)
         {
-            _httpClient = httpClient ?? new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(30)
-            };
-
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "StreamioX/1.0");
+            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         }
 
-        public async Task<T?> GetFromJsonAsync<T>(string url)
+        /// <summary>
+        /// Fetches and deserializes JSON from a Stremio add-on URL.
+        /// </summary>
+        public async Task<T?> GetFromJsonAsync<T>(string url, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(url))
-                throw new ArgumentException(
-                    "A request URL is required.", nameof(url));
+            ArgumentException.ThrowIfNullOrWhiteSpace(url);
 
-            System.Diagnostics.Debug.WriteLine(
-                $"[StremioClient] GET {url}");
-
-            using var response = await _httpClient.GetAsync(url);
-
+            using var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
-            var json = await response.Content.ReadAsStringAsync();
-
-            System.Diagnostics.Debug.WriteLine(
-                $"[StremioClient] Response length: {json.Length}");
-
-            object? result;
-
-            if (typeof(T) == typeof(CatalogResponse))
-            {
-                result = System.Text.Json.JsonSerializer.Deserialize(
-                    json,
-                    StremioJsonContext.Default.CatalogResponse);
-            }
-            else
-            {
-                throw new NotSupportedException(
-                    $"JSON type {typeof(T).Name} is not registered.");
-            }
-
-            return (T?)result;
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
         }
     }
 }

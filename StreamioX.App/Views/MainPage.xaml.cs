@@ -1,4 +1,3 @@
-﻿using System;
 using StreamioX.App.Navigation;
 using StreamioX.App.ViewModels;
 using Windows.UI.Core;
@@ -11,16 +10,16 @@ namespace StreamioX.App.Views
     {
         public MainViewModel ViewModel { get; }
 
-        private readonly NavigationService _navigationService;
+        private readonly INavigationService _navigationService;
 
         public MainPage()
         {
             InitializeComponent();
 
-            _navigationService = new NavigationService();
+            _navigationService = AppServices.GetRequiredService<INavigationService>();
             _navigationService.Initialize(ContentFrame);
 
-            ViewModel = new MainViewModel(_navigationService);
+            ViewModel = AppServices.GetRequiredService<MainViewModel>();
             DataContext = ViewModel;
 
             Loaded += MainPage_Loaded;
@@ -29,8 +28,7 @@ namespace StreamioX.App.Views
 
         private void MainPage_Loaded(object sender, RoutedEventArgs e)
         {
-            SystemNavigationManager.GetForCurrentView().BackRequested
-                += System_BackRequested;
+            SystemNavigationManager.GetForCurrentView().BackRequested += System_BackRequested;
 
             NavShell.SelectedItem = HomeNavItem;
 
@@ -41,15 +39,13 @@ namespace StreamioX.App.Views
 
             HomeNavItem.Focus(FocusState.Programmatic);
         }
+
         private void MainPage_Unloaded(object sender, RoutedEventArgs e)
         {
-            SystemNavigationManager.GetForCurrentView().BackRequested
-                -= System_BackRequested;
+            SystemNavigationManager.GetForCurrentView().BackRequested -= System_BackRequested;
         }
 
-        private void System_BackRequested(
-            object sender,
-            BackRequestedEventArgs e)
+        private void System_BackRequested(object sender, BackRequestedEventArgs e)
         {
             if (ContentFrame.CanGoBack)
             {
@@ -58,9 +54,7 @@ namespace StreamioX.App.Views
             }
         }
 
-        private void NavShell_ItemInvoked(
-            NavigationView sender,
-            NavigationViewItemInvokedEventArgs args)
+        private void NavShell_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
         {
             if (args.IsSettingsInvoked)
             {
@@ -76,23 +70,18 @@ namespace StreamioX.App.Views
                 case "Home":
                     ViewModel.NavigateToHomeCommand.Execute(null);
                     break;
-
                 case "Discover":
                     ViewModel.NavigateToDiscoverCommand.Execute(null);
                     break;
-
                 case "Library":
                     ViewModel.NavigateToLibraryCommand.Execute(null);
                     break;
-
                 case "Addons":
                     ViewModel.NavigateToAddonsCommand.Execute(null);
                     break;
-
                 case "Player":
                     ViewModel.NavigateToPlayerCommand.Execute(null);
                     break;
-
                 case "Diagnostic":
                     ViewModel.NavigateToDiagnosticCommand.Execute(null);
                     break;
