@@ -4,19 +4,41 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="#05060A"
     XYFocusKeyboardNavigation="Enabled">
-
     <Grid Background="#05060A">
-        <MediaPlayerElement x:Name="PlayerWidget"
-                            AreTransportControlsEnabled="True"
-                            AutoPlay="True"
-                            HorizontalAlignment="Stretch"
-                            VerticalAlignment="Stretch"/>
-
-        <Grid VerticalAlignment="Top" Padding="48,27,48,27" Background="#B305060A">
+        <MediaPlayerElement x:Name="PlayerWidget" AreTransportControlsEnabled="True" AutoPlay="True"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+        <Grid VerticalAlignment="Top" Padding="42,26" Background="#B805060A">
             <StackPanel Spacing="5">
-                <TextBlock Text="{Binding MediaTitle}" Foreground="#FFFFFF" FontSize="24" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding MediaTitle}" Foreground="White" FontSize="24" FontWeight="SemiBold"/>
                 <TextBlock Text="{Binding PlaybackError}" Foreground="#FFFF9B8F" FontSize="14" TextWrapping="Wrap"/>
             </StackPanel>
         </Grid>
+        <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Background="#D905060A"
+                Padding="28,18" BorderBrush="#553D3A55" BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <Button Content="−10s" MinWidth="88" MinHeight="48" Click="SkipBack_Click"
+                            Background="#202235" Foreground="White"/>
+                    <Button Content="Play / Pause" MinWidth="132" MinHeight="48" Click="PlayPause_Click"
+                            Background="#7B5CFF" Foreground="White"/>
+                    <Button Content="+10s" MinWidth="88" MinHeight="48" Click="SkipForward_Click"
+                            Background="#202235" Foreground="White"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock Text="Speed" Foreground="#C9C5D6" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="PlaybackSpeedBox" Width="112" SelectedIndex="1">
+                        <ComboBoxItem Content="0.75×" Tag="0.75"/>
+                        <ComboBoxItem Content="1×" Tag="1"/>
+                        <ComboBoxItem Content="1.25×" Tag="1.25"/>
+                        <ComboBoxItem Content="1.5×" Tag="1.5"/>
+                        <ComboBoxItem Content="2×" Tag="2"/>
+                    </ComboBox>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Page>

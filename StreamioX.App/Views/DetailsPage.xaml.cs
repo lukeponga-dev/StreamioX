@@ -24,6 +24,19 @@ namespace StreamioX.App.Views
                 ViewModel.PlayEpisodeCommand.Execute(episode);
         }
 
+        private void StreamButton_GotFocus(object sender, Windows.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is StreamSource stream)
+            {
+                var lines = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrWhiteSpace(stream.Name)) lines.Add(stream.Name);
+                if (!string.IsNullOrWhiteSpace(stream.Title)) lines.Add(stream.Title);
+                lines.Add(stream.SourceKind);
+                StreamDetailsText.Text = string.Join(" · ", lines);
+                StreamDetailsPanel.Visibility = Windows.UI.Xaml.Visibility.Visible;
+            }
+        }
+
         private void StreamButton_Click(object sender, Windows.UI.Xaml.RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is StreamSource stream)

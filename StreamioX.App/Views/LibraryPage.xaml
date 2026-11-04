@@ -4,42 +4,57 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent"
     XYFocusKeyboardNavigation="Enabled">
-
-    <Grid Padding="48,27,48,27">
+    <Grid Padding="28,24,28,24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <TextBlock Text="My Library" Foreground="{StaticResource TextPrimaryBrush}" FontSize="36" FontWeight="SemiBold"/>
-        <TextBlock Grid.Row="1" Text="{Binding Status}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16" Margin="0,8,0,18"/>
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Entries}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapGrid Orientation="Horizontal" MaximumRowsOrColumns="5"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Width="190" Margin="0,0,16,18">
-                            <StackPanel Spacing="7">
-                                <Button Click="OpenEntry_Click" Tag="{Binding}" Padding="0" Background="#171923" HorizontalContentAlignment="Stretch">
-                                    <Grid Height="270">
-                                        <Image Source="{Binding PosterUrl}" Stretch="UniformToFill"/>
-                                        <Border VerticalAlignment="Bottom" Background="#D910121A" Padding="9">
-                                            <TextBlock Text="{Binding DisplayTitle}" Foreground="White" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" MaxLines="2"/>
-                                        </Border>
-                                    </Grid>
-                                </Button>
-                                <TextBlock Text="{Binding ProgressText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
-                                <Button Content="Remove" Tag="{Binding}" Click="RemoveEntry_Click" HorizontalAlignment="Left" Padding="10,5" Background="{StaticResource SurfaceBrush}" Foreground="{StaticResource TextSecondaryBrush}"/>
-                            </StackPanel>
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
-        <ProgressRing Grid.Row="2" IsActive="{Binding IsLoading}" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Top" Foreground="{StaticResource FocusAccentBrush}"/>
+        <StackPanel Grid.Row="0" Spacing="5" Margin="0,0,0,16">
+            <TextBlock Text="My Library" Foreground="{StaticResource TextPrimaryBrush}" FontSize="34" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="15"/>
+        </StackPanel>
+        <Grid Grid.Row="1" Margin="0,0,0,16" ColumnSpacing="12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Button x:Name="AllFilterButton" Content="All" Tag="All" Click="Filter_Click" MinWidth="82" MinHeight="42" Background="#7B5CFF" Foreground="White"/>
+            <Button Grid.Column="1" x:Name="MoviesFilterButton" Content="Movies" Tag="movie" Click="Filter_Click" MinWidth="92" MinHeight="42" Background="#171827" Foreground="White"/>
+            <Button Grid.Column="2" x:Name="SeriesFilterButton" Content="Series" Tag="series" Click="Filter_Click" MinWidth="92" MinHeight="42" HorizontalAlignment="Left" Background="#171827" Foreground="White"/>
+            <ComboBox x:Name="SortBox" Grid.Column="3" Width="190" SelectedIndex="0" SelectionChanged="SortBox_SelectionChanged" VerticalAlignment="Center">
+                <ComboBoxItem Content="Recently watched" Tag="recent"/>
+                <ComboBoxItem Content="Title A–Z" Tag="title"/>
+                <ComboBoxItem Content="Recently added" Tag="added"/>
+            </ComboBox>
+        </Grid>
+        <Grid Grid.Row="2">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="LibraryItems" ItemsSource="{Binding Entries}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapGrid Orientation="Horizontal" MaximumRowsOrColumns="6"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Width="156" Margin="0,0,14,18">
+                                <StackPanel Spacing="7">
+                                    <Button Click="OpenEntry_Click" Tag="{Binding}" Padding="0" Background="#171923" HorizontalContentAlignment="Stretch">
+                                        <Grid Height="222">
+                                            <Image Source="{Binding PosterUrl}" Stretch="UniformToFill"/>
+                                            <Border VerticalAlignment="Bottom" Background="#D910121A" Padding="8">
+                                                <TextBlock Text="{Binding DisplayTitle}" Foreground="White" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" MaxLines="2"/>
+                                            </Border>
+                                        </Grid>
+                                    </Button>
+                                    <TextBlock Text="{Binding ProgressText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+                                    <Button Content="Remove" Tag="{Binding}" Click="RemoveEntry_Click" HorizontalAlignment="Left" Padding="10,5" Background="{StaticResource SurfaceBrush}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <TextBlock x:Name="EmptyText" Text="Nothing here yet. Save movies and series from their details pages."
+                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="18" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" Visibility="Collapsed" TextWrapping="Wrap" MaxWidth="620" TextAlignment="Center"/>
+            <ProgressRing IsActive="{Binding IsLoading}" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Top" Foreground="{StaticResource FocusAccentBrush}"/>
+        </Grid>
     </Grid>
 </Page>

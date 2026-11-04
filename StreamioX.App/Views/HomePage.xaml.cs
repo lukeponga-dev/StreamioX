@@ -1,4 +1,4 @@
-using StreamioX.App.Helpers;
+using StreamioX.App.Models;
 using StreamioX.App.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -18,20 +18,24 @@ namespace StreamioX.App.Views
             Loaded += HomePage_Loaded;
         }
 
-        private void HomePage_Loaded(object sender, RoutedEventArgs e)
+        private async void HomePage_Loaded(object sender, RoutedEventArgs e)
         {
-            FocusHelper.Restore(this, ExploreDiscoverButton);
+            await ViewModel.LoadAsync();
+        }
+
+        private void Poster_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is Movie movie) ViewModel.OpenMovie(movie);
+        }
+
+        private void Continue_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is LibraryEntry entry) ViewModel.OpenLibraryEntry(entry);
         }
 
         protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
         {
-            FocusHelper.Capture(this, ExploreDiscoverButton);
             base.OnNavigatingFrom(e);
-        }
-
-        private void ExploreDiscover_Click(object sender, RoutedEventArgs e)
-        {
-            Frame.Navigate(typeof(DiscoverPage));
         }
     }
 }

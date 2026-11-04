@@ -2,6 +2,7 @@ using StreamioX.App.ViewModels;
 using System;
 using Windows.Media.Core;
 using Windows.Media.Playback;
+using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
 
@@ -17,8 +18,8 @@ namespace StreamioX.App.Views
             InitializeComponent();
             ViewModel = AppServices.GetRequiredService<PlayerViewModel>();
             DataContext = ViewModel;
-
             _mediaPlayer = new MediaPlayer();
+            PlaybackSpeedBox.SelectionChanged += PlaybackSpeed_Changed;
             PlayerWidget.SetMediaPlayer(_mediaPlayer);
             _mediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
             _mediaPlayer.PlaybackSession.PlaybackStateChanged += PlaybackSession_PlaybackStateChanged;
@@ -32,23 +33,47 @@ namespace StreamioX.App.Views
                 ViewModel.SetPlaybackError("No playable stream URL was provided.");
                 return;
             }
-
             try
             {
-                if (!Uri.TryCreate(streamUrl, UriKind.Absolute, out var uri)
-                    || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                if (!Uri.TryCreate(streamUrl, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                 {
                     ViewModel.SetPlaybackError("This stream is not a direct HTTP/HTTPS media URL. Torrent and external-player streams need a compatible playback bridge.");
                     return;
                 }
-
                 ViewModel.LoadStream(streamUrl, "Now Playing");
                 _mediaPlayer.Source = MediaSource.CreateFromUri(uri);
                 _mediaPlayer.Play();
             }
-            catch (Exception ex)
+            catch (Exception ex) { ViewModel.SetPlaybackError($"Unable to start playback: {ex.Message}"); }
+        }
+
+        private void SkipBack_Click(object sender, RoutedEventArgs e) => SeekBy(TimeSpan.FromSeconds(-10));
+        private void SkipForward_Click(object sender, RoutedEventArgs e) => SeekBy(TimeSpan.FromSeconds(10));
+        private void SeekBy(TimeSpan offset)
+        {
+            var session = _mediaPlayer.PlaybackSession;
+            var target = session.Position + offset;
+            if (target < TimeSpan.Zero) target = TimeSpan.Zero;
+            if (session.NaturalDuration > TimeSpan.Zero && target > session.NaturalDuration) target = session.NaturalDuration;
+            session.Position = target;
+        }
+
+        private void PlayPause_Click(object sender, RoutedEventArgs e)
+        {
+            if (_mediaPlayer.PlaybackSession.PlaybackState == MediaPlaybackState.Playing) _mediaPlayer.Pause();
+            else _mediaPlayer.Play();
+        }
+
+        private void PlaybackSpeed_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            // This handler is attached after InitializeComponent and MediaPlayer creation,
+            // so XAML's initial SelectedIndex cannot trigger it against an uninitialized player.
+            if (PlaybackSpeedBox?.SelectedItem is ComboBoxItem item &&
+                double.TryParse(item.Tag?.ToString(), System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture, out var speed))
             {
-                ViewModel.SetPlaybackError($"Unable to start playback: {ex.Message}");
+                _mediaPlayer.PlaybackSession.PlaybackRate = speed;
             }
         }
 

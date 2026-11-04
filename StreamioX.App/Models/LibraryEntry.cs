@@ -15,8 +15,10 @@ namespace StreamioX.App.Models
         [JsonPropertyName("lastEpisodeId")] public string? LastEpisodeId { get; set; }
         [JsonIgnore] public string DisplayTitle => Movie?.Title ?? "Unknown title";
         [JsonIgnore] public string? PosterUrl => Movie?.PosterUrl;
+        [JsonIgnore] public double ProgressPercent => DurationSeconds > 0
+            ? Math.Clamp(PositionSeconds / DurationSeconds * 100, 0, 100) : 0;
         [JsonIgnore] public string ProgressText => DurationSeconds > 0 && PositionSeconds > 0
-            ? $"Continue · {Math.Clamp(PositionSeconds / DurationSeconds * 100, 0, 100):0}% watched"
+            ? $"Continue · {ProgressPercent:0}% watched"
             : "Saved to your library";
     }
 }

@@ -59,10 +59,16 @@
                     <ProgressRing IsActive="{Binding IsLoadingStreams}" Width="20" Height="20" Foreground="{StaticResource FocusAccentBrush}"/>
                 </StackPanel>
                 <TextBlock Text="{Binding ErrorMessage}" Foreground="#FFFF9B8F" TextWrapping="Wrap"/>
+                <Border x:Name="StreamDetailsPanel" Background="#151725" BorderBrush="#4B4568" BorderThickness="1" CornerRadius="8" Padding="14" Visibility="Collapsed">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Selected source" Foreground="{StaticResource FocusAccentBrush}" FontSize="13" FontWeight="Bold"/>
+                        <TextBlock x:Name="StreamDetailsText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="15" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
                 <ListView ItemsSource="{Binding Streams}" SelectionMode="None" XYFocusKeyboardNavigation="Enabled">
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <Button Click="StreamButton_Click"
+                            <Button Click="StreamButton_Click" GotFocus="StreamButton_GotFocus"
                                     Tag="{Binding}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"

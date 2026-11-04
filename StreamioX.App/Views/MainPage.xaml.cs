@@ -42,7 +42,6 @@ namespace StreamioX.App.Views
 
         private void NavShell_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
         {
-            if (args.IsSettingsInvoked) { ViewModel.NavigateToSettingsCommand.Execute(null); return; }
             if (args.InvokedItemContainer?.Tag is not string tag) return;
             switch (tag)
             {
@@ -51,9 +50,13 @@ namespace StreamioX.App.Views
                 case "Search": ViewModel.NavigateToSearchCommand.Execute(null); break;
                 case "Library": ViewModel.NavigateToLibraryCommand.Execute(null); break;
                 case "Addons": ViewModel.NavigateToAddonsCommand.Execute(null); break;
-                case "Player": ViewModel.NavigateToPlayerCommand.Execute(null); break;
-                case "Diagnostic": ViewModel.NavigateToDiagnosticCommand.Execute(null); break;
             }
         }
+
+        private void ProfileSettings_Click(object sender, RoutedEventArgs e) =>
+            ViewModel.NavigateToSettingsCommand.Execute(null);
+
+        private void ProfileDiagnostics_Click(object sender, RoutedEventArgs e) =>
+            ViewModel.NavigateToDiagnosticCommand.Execute(null);
     }
 }
