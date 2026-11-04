@@ -1,3 +1,4 @@
+using System;
 using StreamioX.App.Navigation;
 using StreamioX.App.ViewModels;
 using Windows.UI.Core;
@@ -53,10 +54,28 @@ namespace StreamioX.App.Views
             }
         }
 
+        private void ProfileLibrary_Click(object sender, RoutedEventArgs e) =>
+            ViewModel.NavigateToLibraryCommand.Execute(null);
+
+        private void ProfileAddons_Click(object sender, RoutedEventArgs e) =>
+            ViewModel.NavigateToAddonsCommand.Execute(null);
+
         private void ProfileSettings_Click(object sender, RoutedEventArgs e) =>
             ViewModel.NavigateToSettingsCommand.Execute(null);
 
         private void ProfileDiagnostics_Click(object sender, RoutedEventArgs e) =>
             ViewModel.NavigateToDiagnosticCommand.Execute(null);
+
+        private async void ProfileAbout_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "About StreamioX",
+                Content = "StreamioX is an Xbox-first media discovery and playback client. Catalogs, metadata and streams are supplied by your installed Stremio-compatible add-ons.",
+                CloseButtonText = "Close",
+                XamlRoot = Content.XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
     }
 }

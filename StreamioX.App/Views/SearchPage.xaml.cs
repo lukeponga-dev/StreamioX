@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Windows.Storage;
 using StreamioX.App.Helpers;
 using StreamioX.App.Models;
 using StreamioX.App.ViewModels;
@@ -28,7 +29,41 @@ namespace StreamioX.App.Views
             ViewModel.ResultsChanged += (_, __) => RenderResults();
             ViewModel.StatusChanged += (_, message) => StatusText.Text = message;
             _searchTimer.Tick += SearchTimer_Tick;
-            Loaded += (_, __) => { RenderRecentSearches(); SearchInput.Focus(FocusState.Programmatic); };
+            Loaded += (_, __) => { LoadRecentSearches(); RenderRecentSearches(); SearchInput.Focus(FocusState.Programmatic); };
+        }
+
+        private void LoadRecentSearches()
+        {
+            try
+            {
+                if (ApplicationData.Current.LocalSettings.Values.TryGetValue("RecentSearches", out var saved) &&
+                    saved is string storedSearches)
+                {
+                    _recentSearches.Clear();
+                    foreach (var item in storedSearches.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        if (!string.IsNullOrWhiteSpace(item) && _recentSearches.Count < 6)
+                            _recentSearches.Add(item.Trim());
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                _recentSearches.Clear();
+            }
+        }
+
+        private void SaveRecentSearches()
+        {
+            try
+            {
+                ApplicationData.Current.LocalSettings.Values["RecentSearches"] =
+                    string.Join("\n", _recentSearches);
+            }
+            catch (Exception)
+            {
+                // Search remains usable if local settings are unavailable.
+            }
         }
 
         private async void SearchTimer_Tick(object sender, object e)
@@ -67,6 +102,7 @@ namespace StreamioX.App.Views
                 _recentSearches.RemoveAll(x => string.Equals(x, query, StringComparison.OrdinalIgnoreCase));
                 _recentSearches.Insert(0, query);
                 if (_recentSearches.Count > 6) _recentSearches.RemoveAt(_recentSearches.Count - 1);
+                SaveRecentSearches();
                 RenderRecentSearches();
             }
             finally { _isRunningSearch = false; SearchButton.IsEnabled = true; }

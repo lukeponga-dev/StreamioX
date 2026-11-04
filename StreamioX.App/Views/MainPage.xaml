@@ -53,8 +53,11 @@
                             <TextBlock Text="Luke" Foreground="White" FontSize="18" FontWeight="SemiBold"/>
                             <TextBlock Text="STREAMIOX PROFILE" Foreground="#91A29A" FontSize="11"/>
                             <Rectangle Height="1" Fill="#263B33"/>
+                            <Button Content="My Library" HorizontalAlignment="Stretch" Click="ProfileLibrary_Click"/>
+                            <Button Content="Add-ons" HorizontalAlignment="Stretch" Click="ProfileAddons_Click"/>
                             <Button Content="Settings" HorizontalAlignment="Stretch" Click="ProfileSettings_Click"/>
                             <Button Content="Diagnostics" HorizontalAlignment="Stretch" Click="ProfileDiagnostics_Click"/>
+                            <Button Content="About StreamioX" HorizontalAlignment="Stretch" Click="ProfileAbout_Click"/>
                         </StackPanel>
                     </Border>
                 </Flyout>

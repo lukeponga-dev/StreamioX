@@ -33,25 +33,9 @@
 
                 <TextBlock Text="{Binding DescriptionText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16" TextWrapping="Wrap" LineHeight="24"/>
                 
-                <StackPanel Spacing="8" Visibility="{Binding EpisodesVisibility, Converter={StaticResource StringToVisibilityConverter}}">
+                <StackPanel x:Name="EpisodesSection" Spacing="8" Visibility="Collapsed">
                     <TextBlock Text="Episodes" Foreground="{StaticResource TextPrimaryBrush}" FontSize="22" FontWeight="SemiBold"/>
-                    <ListView ItemsSource="{Binding Episodes}" SelectionMode="None" IsItemClickEnabled="False" XYFocusKeyboardNavigation="Enabled">
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Button Click="EpisodeButton_Click"
-                                        Tag="{Binding}"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
-                                        Margin="0,3" Padding="14,10"
-                                        Background="{StaticResource SurfaceBrush}">
-                                    <StackPanel Spacing="3">
-                                        <TextBlock Text="{Binding Title}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="16" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding Overview}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="13" TextWrapping="Wrap" MaxHeight="42"/>
-                                    </StackPanel>
-                                </Button>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                    <StackPanel x:Name="EpisodesRow" Spacing="8"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Spacing="14">
@@ -65,24 +49,7 @@
                         <TextBlock x:Name="StreamDetailsText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="15" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
-                <ListView ItemsSource="{Binding Streams}" SelectionMode="None" XYFocusKeyboardNavigation="Enabled">
-                    <ListView.ItemTemplate>
-                        <DataTemplate>
-                            <Button Click="StreamButton_Click" GotFocus="StreamButton_GotFocus"
-                                    Tag="{Binding}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
-                                    Margin="0,4" Padding="16,12"
-                                    Background="{StaticResource SurfaceBrush}">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Bold" FontSize="16"/>
-                                    <TextBlock Text="{Binding Title}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding SourceKind}" Foreground="{StaticResource FocusAccentBrush}" FontSize="12"/>
-                                </StackPanel>
-                            </Button>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
+                <StackPanel x:Name="StreamsRow" Spacing="8"/>
             </StackPanel>
         </ScrollViewer>
     </Grid>
