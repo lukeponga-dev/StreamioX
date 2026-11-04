@@ -11,6 +11,8 @@ namespace StreamioX.App.Models
     [JsonSerializable(typeof(MetaResponse))]
     [JsonSerializable(typeof(Movie))]
     [JsonSerializable(typeof(Movie[]))]
+    [JsonSerializable(typeof(LibraryEntry))]
+    [JsonSerializable(typeof(List<LibraryEntry>))]
     [JsonSerializable(typeof(Video))]
     [JsonSerializable(typeof(List<Video>))]
     [JsonSerializable(typeof(StreamResponse))]

@@ -18,10 +18,8 @@
   <ItemGroup>
     <Folder Include="Converters\" />
   </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' == 'x64' and '$(BuildTorrentBridge)' != 'false'">
-    <Content Include="..\native\torrent-bridge\target\x86_64-uwp-windows-msvc\release\streamio_torrent_bridge.dll"
-             Link="streamio_torrent_bridge.dll"
-             CopyToOutputDirectory="PreserveNewest" />
+  <ItemGroup Condition="'$(Platform)' == 'x64' and Exists('$(MSBuildProjectDirectory)\..\native\torrent-bridge\target\x86_64-uwp-windows-msvc\release\streamio_torrent_bridge.dll')">
+    <Content Include="..\native\torrent-bridge\target\x86_64-uwp-windows-msvc\release\streamio_torrent_bridge.dll" Link="streamio_torrent_bridge.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="BuildTorrentBridge" BeforeTargets="PrepareForBuild" Condition="'$(Platform)' == 'x64' and '$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true' and '$(BuildTorrentBridge)' != 'false'">
@@ -30,8 +28,8 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0-rc.3.26522.148" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="11.0.0-rc.3.26522.148" />
     <PackageReference Include="Microsoft.UI.Xaml" Version="2.8.7" />
   </ItemGroup>
 </Project>

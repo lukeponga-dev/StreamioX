@@ -18,6 +18,7 @@ namespace StreamioX.App.ViewModels
         private readonly INavigationService _navigationService;
         private readonly IAddonService _addonService;
         private readonly ITorrentBridgeService _torrentBridgeService;
+        private readonly ILibraryService _libraryService;
 
         private CancellationTokenSource? _loadCts;
         private CancellationTokenSource? _streamsCts;
@@ -29,6 +30,8 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] private bool isLoadingStreams;
         [ObservableProperty] private bool isLoadingMetadata;
         [ObservableProperty] private string? errorMessage;
+        [ObservableProperty] private bool isSavedInLibrary;
+        [ObservableProperty] private string libraryButtonText = "Add to Library";
 
         // Flatten nested metadata into bindable page properties. This avoids UWP
         // nested-property binding and string-to-ImageSource conversion issues.
@@ -47,13 +50,15 @@ namespace StreamioX.App.ViewModels
             IMetadataService metadataService,
             INavigationService navigationService,
             IAddonService addonService,
-            ITorrentBridgeService torrentBridgeService)
+            ITorrentBridgeService torrentBridgeService,
+            ILibraryService libraryService)
         {
             _streamService = streamService ?? throw new ArgumentNullException(nameof(streamService));
             _metadataService = metadataService ?? throw new ArgumentNullException(nameof(metadataService));
             _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
             _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
             _torrentBridgeService = torrentBridgeService ?? throw new ArgumentNullException(nameof(torrentBridgeService));
+            _libraryService = libraryService ?? throw new ArgumentNullException(nameof(libraryService));
         }
 
         public async Task InitializeAsync(Movie movie)
@@ -64,6 +69,8 @@ namespace StreamioX.App.ViewModels
 
             movie.Type ??= "movie";
             SelectedMovie = movie;
+            IsSavedInLibrary = await _libraryService.IsSavedAsync(movie.Type ?? "movie", movie.Id ?? string.Empty).ConfigureAwait(true);
+            LibraryButtonText = IsSavedInLibrary ? "Remove from Library" : "Add to Library";
             NotifyDetailsProperties();
             Episodes.Clear();
             Streams.Clear();
@@ -109,6 +116,24 @@ namespace StreamioX.App.ViewModels
             finally
             {
                 IsLoadingMetadata = false;
+            }
+        }
+
+        [RelayCommand]
+        private async Task ToggleLibraryAsync()
+        {
+            if (SelectedMovie?.Id == null) return;
+            if (IsSavedInLibrary)
+            {
+                await _libraryService.RemoveAsync(SelectedMovie.Type ?? "movie", SelectedMovie.Id).ConfigureAwait(true);
+                IsSavedInLibrary = false;
+                LibraryButtonText = "Add to Library";
+            }
+            else
+            {
+                await _libraryService.SaveAsync(SelectedMovie).ConfigureAwait(true);
+                IsSavedInLibrary = true;
+                LibraryButtonText = "Remove from Library";
             }
         }
 
