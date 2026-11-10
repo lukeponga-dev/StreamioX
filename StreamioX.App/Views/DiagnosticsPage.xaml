@@ -10,6 +10,13 @@
             <TextBlock Text="Playback verification" Foreground="#A1A1AA" FontSize="18"/>
             <TextBlock Text="Launch a public-domain sample video through the same FFmpegInteropX pipeline used by Stremio streams. This temporary test uses a direct HTTPS MP4 and does not contact torrent providers."
                        Foreground="#A1A1AA" FontSize="15" TextWrapping="Wrap"/>
+            <Button Content="Play authenticated Jackettio add-on test (The Matrix)"
+                    Click="PlayAuthenticatedAddon_Click"
+                    HorizontalAlignment="Left"
+                    Padding="24,14"
+                    Background="#174C3A"
+                    Foreground="White"
+                    FontSize="17"/>
             <Button Content="Play Big Buck Bunny test video"
                     Click="PlayBigBuckBunny_Click"
                     HorizontalAlignment="Left"
