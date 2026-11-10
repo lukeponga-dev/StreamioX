@@ -19,6 +19,7 @@ namespace StreamioX.App.Services
         Task<IReadOnlyList<StreamSource>> GetFromInstalledAddonsAsync(
             string type,
             string id,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellationToken = default,
+            System.Func<IReadOnlyList<StreamSource>, Task>? onProviderResult = null);
     }
 }

@@ -82,14 +82,21 @@ namespace StreamioX.App.Services
                     { "reconnect_streamed", 1 },
                     { "reconnect_on_network_error", 1 },
                     { "rw_timeout", "15000000" },
+                    // Bound stream probing so playback can begin without waiting
+                    // for a large portion of the source to be analyzed.
+                    { "probesize", "5000000" },
+                    { "analyzeduration", "3000000" },
                     { "user_agent", GetFfmpegUserAgent(requestHeaders) },
                     { "headers", BuildFfmpegHeaders(requestHeaders) }
                 }
             };
             config.Audio.DownmixAudioStreamsToStereo = true;
             config.General.ReadAheadBufferEnabled = true;
-            config.General.ReadAheadBufferDuration = TimeSpan.FromSeconds(15);
-            config.General.ReadAheadBufferSize = 32 * 1024 * 1024;
+            // Keep a modest startup buffer: enough to absorb normal network jitter
+            // without forcing a long pre-roll before the first frames are presented.
+            config.General.ReadAheadBufferDuration = TimeSpan.FromSeconds(3);
+            config.General.ReadAheadBufferSize = 8 * 1024 * 1024;
+            PlaybackDiagnostics.Write("[Playback] Low-startup buffer: 3s read-ahead / 8 MiB; FFmpeg probe: 5 MB / 3s.");
 
             reportStage?.Invoke("Opening original stream URL with FFmpegInteropX");
             PlaybackDiagnostics.Write("[Playback] Creating FFmpegMediaSource from original URI.");

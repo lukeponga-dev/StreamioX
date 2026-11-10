@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using StreamioX.App.Models;
@@ -45,30 +46,39 @@ namespace StreamioX.App.Services
         public async Task<IReadOnlyList<StreamSource>> GetFromInstalledAddonsAsync(
             string type,
             string id,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            Func<IReadOnlyList<StreamSource>, Task>? onProviderResult = null)
         {
             await _addonService.InitializeAsync(cancellationToken).ConfigureAwait(false);
-
             var providers = _addonService.GetStreamProviders(type, id);
-            var results = new List<StreamSource>();
+            if (providers.Count == 0)
+                return Array.Empty<StreamSource>();
 
-            foreach (var addon in providers)
+            // Start every provider before awaiting any of them. Each successful
+            // provider publishes its results immediately, enabling the details
+            // page to expose a playable source while slower add-ons continue.
+            var tasks = providers.Select(async addon =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var streams = await GetStreamsAsync(addon.BaseUrl, type, id, cancellationToken)
                         .ConfigureAwait(false);
-                    results.AddRange(streams);
+                    if (streams.Count > 0 && onProviderResult != null)
+                        await onProviderResult(streams).ConfigureAwait(false);
+                    return streams;
                 }
                 catch (OperationCanceledException) { throw; }
                 catch
                 {
-                    // Skip a failed provider. Failed requests are not added to the cache.
+                    // Isolate provider failures so one unavailable add-on doesn't
+                    // prevent other providers from returning playable streams.
+                    return (IReadOnlyList<StreamSource>)Array.Empty<StreamSource>();
                 }
-            }
+            }).ToArray();
 
-            return results;
+            var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+            return results.SelectMany(streams => streams).ToArray();
         }
     }
 }

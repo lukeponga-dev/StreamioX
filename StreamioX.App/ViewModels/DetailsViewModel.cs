@@ -231,21 +231,54 @@ namespace StreamioX.App.ViewModels
             try
             {
                 var fetched = await _streamService.GetFromInstalledAddonsAsync(
-                    SelectedMovie.Type ?? "movie", contentId, token).ConfigureAwait(true);
-                foreach (var stream in fetched)
-                    Streams.Add(stream);
+                    SelectedMovie.Type ?? "movie",
+                    contentId,
+                    token,
+                    async providerStreams =>
+                    {
+                        var ordered = providerStreams
+                            .Where(IsViableStream)
+                            .OrderByDescending(IsDirectHttpStream)
+                            .ToArray();
+                        if (ordered.Length == 0)
+                            return;
 
-                // Pre-resolve local torrent bridge URLs without starting playback.
-                // PlayStreamAsync receives the same StreamSource and reuses the URL.
-                _ = PreResolveTorrentUrlsAsync(fetched, token);
+                        // Provider callbacks can arrive on background threads. Marshal
+                        // each batch to the UI immediately instead of waiting for all add-ons.
+                        await Windows.ApplicationModel.Core.CoreApplication.MainView
+                            .CoreWindow.Dispatcher.RunAsync(
+                                Windows.UI.Core.CoreDispatcherPriority.Normal,
+                                () =>
+                                {
+                                    foreach (var stream in ordered)
+                                    {
+                                        if (!Streams.Any(existing => ReferenceEquals(existing, stream)))
+                                            Streams.Add(stream);
+                                    }
+                                });
+                        _ = PreResolveTorrentUrlsAsync(ordered, token);
+                    }).ConfigureAwait(true);
 
+                // If no provider published a viable stream, retain a useful empty-state message.
                 if (Streams.Count == 0)
-                    ErrorMessage = "No streams found for this selection. Install a stream add-on that supports this title.";
+                    ErrorMessage = fetched.Count == 0
+                        ? "No streams found for this selection. Install a stream add-on that supports this title."
+                        : "Add-ons returned no playable stream for this selection.";
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { ErrorMessage = $"Failed to load streams: {ex.Message}"; }
             finally { IsLoadingStreams = false; }
         }
+
+        private static bool IsDirectHttpStream(StreamSource stream) =>
+            Uri.TryCreate(stream.Url, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+        private static bool IsViableStream(StreamSource stream) =>
+            IsDirectHttpStream(stream) ||
+            !string.IsNullOrWhiteSpace(stream.InfoHash) ||
+            (Uri.TryCreate(stream.Url, UriKind.Absolute, out var uri) &&
+             string.Equals(uri.Scheme, "magnet", StringComparison.OrdinalIgnoreCase));
 
         private async Task PrefetchEpisodeStreamsAsync(string episodeId, CancellationToken cancellationToken)
         {
@@ -253,8 +286,11 @@ namespace StreamioX.App.ViewModels
             {
                 var type = SelectedMovie?.Type ?? "series";
                 var streams = await _streamService.GetFromInstalledAddonsAsync(
-                    type, episodeId, cancellationToken).ConfigureAwait(false);
-                await PreResolveTorrentUrlsAsync(streams, cancellationToken).ConfigureAwait(false);
+                    type,
+                    episodeId,
+                    cancellationToken,
+                    providerStreams => PreResolveTorrentUrlsAsync(providerStreams, cancellationToken))
+                    .ConfigureAwait(false);
                 PlaybackDiagnostics.Write(
                     $"[Prefetch] Cached {streams.Count} stream result(s) for episode {episodeId}.");
             }

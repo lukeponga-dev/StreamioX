@@ -41,7 +41,7 @@ namespace StreamioX.App.Views
             FocusHelper.AttachXboxFocus(PlaybackSpeedBox);
             FocusHelper.AttachXboxFocus(SubtitleButton);
             FocusHelper.AttachXboxFocus(AudioButton);
-            _mediaPlayer = new MediaPlayer();
+            _mediaPlayer = AppServices.GetRequiredService<PlaybackSessionService>().Player;
             _ffmpegService = AppServices.GetRequiredService<FFmpegPlaybackService>();
             _libraryService = AppServices.GetRequiredService<ILibraryService>();
             PlaybackSpeedBox.SelectionChanged += PlaybackSpeed_Changed;
@@ -662,6 +662,8 @@ namespace StreamioX.App.Views
             _osdTimer?.Stop();
             _mediaPlayer.Pause();
             _mediaPlayer.Source = null;
+            _mediaPlayer.MediaFailed -= MediaPlayer_MediaFailed;
+            _mediaPlayer.PlaybackSession.PlaybackStateChanged -= PlaybackSession_PlaybackStateChanged;
             _playbackItem = null;
             _ffmpegService.Stop();
         }

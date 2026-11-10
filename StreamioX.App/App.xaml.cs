@@ -25,6 +25,10 @@ namespace StreamioX.App
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
+            // Create and touch the shared MediaPlayer before navigating to content.
+            // MediaPlayer/XAML setup stays on the UI thread; network startup remains asynchronous.
+            AppServices.GetRequiredService<PlaybackSessionService>().WarmUp();
+
             // Warm up Stremio addon registry (installs Cinemeta on first run)
             _ = AppServices.GetRequiredService<IAuthService>().InitializeAsync();
             _ = AppServices.GetRequiredService<IAddonService>().InitializeAsync();

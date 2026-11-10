@@ -80,6 +80,7 @@ namespace StreamioX.App
             services.AddSingleton<IStreamService, StreamService>();
             services.AddSingleton<ITorrentBridgeService, TorrentBridgeService>();
             services.AddSingleton<FFmpegPlaybackService>();
+            services.AddSingleton<PlaybackSessionService>();
 
             services.AddTransient<MainViewModel>();
             services.AddTransient<DiscoverViewModel>();
