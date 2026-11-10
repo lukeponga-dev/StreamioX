@@ -31,7 +31,7 @@ namespace StreamioX.App.Services
         public async Task<bool> IsSavedAsync(string type, string id)
         {
             var entries = await GetEntriesAsync().ConfigureAwait(false);
-            return entries.Any(x => Matches(x, type, id));
+            return entries.Any(x => x.InLibrary && Matches(x, type, id));
         }
 
         public async Task SaveAsync(Movie movie)
@@ -45,7 +45,10 @@ namespace StreamioX.App.Services
                 if (existing == null)
                     entries.Add(new LibraryEntry { Movie = movie, AddedUtc = DateTimeOffset.UtcNow });
                 else
+                {
                     existing.Movie = movie;
+                    existing.InLibrary = true;
+                }
                 await SaveFileAsync(entries).ConfigureAwait(false);
             }
             finally { _gate.Release(); }
@@ -57,19 +60,29 @@ namespace StreamioX.App.Services
             try
             {
                 var entries = await LoadAsync().ConfigureAwait(false);
-                entries.RemoveAll(x => Matches(x, type, id));
+                // Keep watch progress so removing a title from the library does not
+                // also drop it from Continue Watching.
+                foreach (var entry in entries.Where(x => Matches(x, type, id)))
+                    entry.InLibrary = false;
+                entries.RemoveAll(x => !x.InLibrary && x.PositionSeconds <= 0);
                 await SaveFileAsync(entries).ConfigureAwait(false);
             }
             finally { _gate.Release(); }
         }
 
-        public async Task UpdateProgressAsync(string type, string id, double positionSeconds, double durationSeconds, string? episodeId = null)
+        public async Task UpdateProgressAsync(string type, string id, double positionSeconds, double durationSeconds, string? episodeId = null, Movie? movie = null)
         {
             await _gate.WaitAsync().ConfigureAwait(false);
             try
             {
                 var entries = await LoadAsync().ConfigureAwait(false);
                 var entry = entries.FirstOrDefault(x => Matches(x, type, id));
+                if (entry == null && movie != null &&
+                    string.Equals(movie.Id, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    entry = new LibraryEntry { Movie = movie, AddedUtc = DateTimeOffset.UtcNow, InLibrary = false };
+                    entries.Add(entry);
+                }
                 if (entry != null)
                 {
                     entry.PositionSeconds = Math.Max(0, positionSeconds);

@@ -234,7 +234,9 @@ namespace StreamioX.App.ViewModels
                 ? stream.BehaviorHints?.ProxyHeaders?.Request
                 : null;
             var request = new PlaybackRequest(streamUrl, title,
-                requestHeaders: requestHeaders);
+                requestHeaders: requestHeaders,
+                movie: SelectedMovie,
+                episodeId: SelectedEpisode?.Id);
             if (!_navigationService.NavigateTo(NavigationRoute.Player, request))
                 ErrorMessage = "The player could not be opened. Please try selecting the stream again.";
         }

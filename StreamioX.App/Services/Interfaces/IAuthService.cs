@@ -21,5 +21,6 @@ namespace StreamioX.App.Services
         Task LogoutAsync(CancellationToken cancellationToken = default);
         Task RefreshUserAsync(CancellationToken cancellationToken = default);
         Task<AddonAccountSyncResult> SyncAddonCollectionAsync(CancellationToken cancellationToken = default);
+        Task<bool> PushAddonCollectionAsync(CancellationToken cancellationToken = default);
     }
 }

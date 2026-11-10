@@ -21,6 +21,9 @@ namespace StreamioX.App.Views
         private readonly DispatcherTimer _osdTimer;
         private MediaPlaybackItem? _playbackItem;
         private bool _updatingProgressSlider;
+        private static readonly TimeSpan ProgressSaveInterval = TimeSpan.FromSeconds(15);
+        private DateTimeOffset _lastProgressSave = DateTimeOffset.MinValue;
+        private TimeSpan? _pendingResumePosition;
 
         public PlayerPage()
         {
@@ -96,6 +99,9 @@ namespace StreamioX.App.Views
 
             ShowLoadingOverlay("Preparing player...");
             ShowOsd();
+            var progressRequest = e.Parameter as PlaybackRequest;
+            ViewModel.SetProgressTarget(progressRequest?.Movie, progressRequest?.EpisodeId);
+            _pendingResumePosition = await ViewModel.GetResumePositionAsync();
             await PlayWithFFmpegAsync(streamUrl, title, seriesTitle, requestHeaders);
         }
 
@@ -224,6 +230,12 @@ namespace StreamioX.App.Views
             var session = _mediaPlayer.PlaybackSession;
             ViewModel.UpdatePlaybackTime(session.Position, session.NaturalDuration);
 
+            if (session.PlaybackState == MediaPlaybackState.Playing &&
+                DateTimeOffset.UtcNow - _lastProgressSave >= ProgressSaveInterval)
+            {
+                SaveProgress();
+            }
+
             // Update progress slider
             try
             {
@@ -316,6 +328,11 @@ namespace StreamioX.App.Views
                 {
                     HideLoadingOverlay();
                     ViewModel.SetStreamingStatus("Playing...");
+                    TryResumePlayback(sender);
+                }
+                else if (sender.PlaybackState == MediaPlaybackState.Paused)
+                {
+                    SaveProgress();
                 }
 
                 // Update play/pause icon
@@ -330,6 +347,33 @@ namespace StreamioX.App.Views
                 }
                 catch { }
             });
+        }
+
+        private void TryResumePlayback(MediaPlaybackSession session)
+        {
+            if (_pendingResumePosition is not { } resumeAt) return;
+            _pendingResumePosition = null;
+            if (!session.CanSeek || session.NaturalDuration <= resumeAt) return;
+
+            try
+            {
+                session.Position = resumeAt;
+                ViewModel.UpdatePlaybackTime(session.Position, session.NaturalDuration);
+                ViewModel.SetStreamingStatus($"Resumed from {resumeAt:hh\\:mm\\:ss}");
+                PlaybackDiagnostics.Write($"[PlayerPage] Resumed playback at {resumeAt}.");
+            }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.Write($"[PlayerPage] Resume seek failed: {ex.Message}");
+            }
+        }
+
+        private void SaveProgress()
+        {
+            if (_mediaPlayer.Source == null) return;
+            var session = _mediaPlayer.PlaybackSession;
+            _lastProgressSave = DateTimeOffset.UtcNow;
+            _ = ViewModel.SaveProgressAsync(session.Position, session.NaturalDuration);
         }
 
         private void SetOsdVisible(bool visible)
@@ -499,6 +543,7 @@ namespace StreamioX.App.Views
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
+            SaveProgress();
             _playbackTimer?.Stop();
             _osdTimer?.Stop();
             _mediaPlayer.Pause();
@@ -512,6 +557,8 @@ namespace StreamioX.App.Views
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            SaveProgress();
+            _pendingResumePosition = null;
             _playbackTimer?.Stop();
             _osdTimer?.Stop();
             _mediaPlayer.Pause();

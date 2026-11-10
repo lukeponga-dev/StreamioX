@@ -64,6 +64,7 @@ namespace StreamioX.App.Models
     {
         public int Pulled { get; set; }
         public int Pushed { get; set; }
+        public int Removed { get; set; }
         public int Failed { get; set; }
         public string Message { get; set; } = string.Empty;
     }

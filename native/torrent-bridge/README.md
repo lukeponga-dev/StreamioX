@@ -22,7 +22,7 @@ rustup toolchain install nightly --profile minimal --component rust-src
 Build the Xbox x64 native library from the repository root:
 
 ```powershell
-cargo +nightly build -Z build-std=std,panic_abort --manifest-path .\native\torrent-bridge\Cargo.toml --target x86_64-uwp-windows-msvc --release
+cargo +nightly build -Z build-std=std,panic_unwind --manifest-path .\native\torrent-bridge\Cargo.toml --target x86_64-uwp-windows-msvc --release
 ```
 
 The output is:
