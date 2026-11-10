@@ -37,13 +37,17 @@ namespace StreamioX.App.ViewModels
 
         // Flatten nested metadata into bindable page properties. This avoids UWP
         // nested-property binding and string-to-ImageSource conversion issues.
-        public string TitleText => SelectedMovie?.Title ?? "Title unavailable";
-        public string DescriptionText => SelectedMovie?.Description ?? "No description is available for this title.";
-        public string ReleaseText => SelectedMovie?.ReleaseInfo ?? string.Empty;
-        public string GenreText => SelectedMovie?.Genres == null ? string.Empty : string.Join("  •  ", SelectedMovie.Genres);
+        private static string NonEmpty(string? value, string fallback = "") =>
+            string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+        public string TitleText => NonEmpty(SelectedMovie?.Title, "Title unavailable");
+        public string DescriptionText => NonEmpty(SelectedMovie?.Description, "No description is available for this title.");
+        public string ReleaseText => NonEmpty(SelectedMovie?.ReleaseInfo);
+        public string GenreText => SelectedMovie?.Genres == null ? string.Empty :
+            string.Join("  •  ", SelectedMovie.Genres.Where(g => !string.IsNullOrWhiteSpace(g)));
         public string RatingText => string.IsNullOrWhiteSpace(SelectedMovie?.ImdbRating) ? string.Empty : $"IMDb {SelectedMovie.ImdbRating}";
-        public string RuntimeText => SelectedMovie?.Runtime ?? string.Empty;
-        public string? PosterUrl => SelectedMovie?.PosterUrl;
+        public string RuntimeText => NonEmpty(SelectedMovie?.Runtime);
+        public string? PosterUrl => NonEmpty(SelectedMovie?.PosterUrl) is { Length: > 0 } poster ? poster : null;
         public string? EpisodesVisibility => Episodes.Count > 0 ? "visible" : null;
         public string ContentTypeText => string.Equals(SelectedMovie?.Type, "series", StringComparison.OrdinalIgnoreCase) ? "SERIES" : "MOVIE";
 
@@ -187,14 +191,31 @@ namespace StreamioX.App.ViewModels
             OnPropertyChanged(nameof(ContentTypeText));
         }
 
+        private static string? Prefer(string? primary, string? fallback) =>
+            string.IsNullOrWhiteSpace(primary) ? fallback : primary;
+
         private static Movie MergePreview(Movie preview, Movie full)
         {
-            full.Id ??= preview.Id;
-            full.Type ??= preview.Type;
-            full.Title ??= preview.Title;
-            full.PosterUrl ??= preview.PosterUrl;
-            full.ReleaseInfo ??= preview.ReleaseInfo;
-            full.Description ??= preview.Description;
+            // Add-on metadata can contain empty strings rather than null for
+            // optional fields. Treat both as missing so the catalog preview
+            // remains available when a provider returns partial metadata.
+            full.Id = Prefer(full.Id, preview.Id);
+            full.Type = Prefer(full.Type, preview.Type);
+            full.Title = Prefer(full.Title, preview.Title);
+            full.PosterUrl = Prefer(full.PosterUrl, preview.PosterUrl);
+            full.BackgroundUrl = Prefer(full.BackgroundUrl, preview.BackgroundUrl);
+            full.ReleaseInfo = Prefer(full.ReleaseInfo, preview.ReleaseInfo);
+            full.Description = Prefer(full.Description, preview.Description);
+            full.ImdbRating = Prefer(full.ImdbRating, preview.ImdbRating);
+            full.Runtime = Prefer(full.Runtime, preview.Runtime);
+            if (full.Genres == null || full.Genres.Count == 0)
+                full.Genres = preview.Genres;
+            if (full.Cast == null || full.Cast.Count == 0)
+                full.Cast = preview.Cast;
+            if (full.Director == null || full.Director.Count == 0)
+                full.Director = preview.Director;
+            if (full.Videos == null || full.Videos.Count == 0)
+                full.Videos = preview.Videos;
             return full;
         }
 

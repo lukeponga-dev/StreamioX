@@ -248,6 +248,11 @@ namespace StreamioX.App.Views
 
         private void HeroWatch_Click(object sender, RoutedEventArgs e) => ViewModel.OpenFeatured();
 
+        private void PlaybackTest_Click(object sender, RoutedEventArgs e)
+        {
+            Frame.Navigate(typeof(DiagnosticsPage));
+        }
+
         private void Poster_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is Movie movie)

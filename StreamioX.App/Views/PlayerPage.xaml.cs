@@ -79,6 +79,8 @@ namespace StreamioX.App.Views
                 ? headerRequest.RequestHeaders
                 : null;
 
+            PlaybackDiagnostics.Write($"[PlayerPage] Navigation received title '{title}'. Stream parameter present: {!string.IsNullOrWhiteSpace(streamUrl)}.");
+
             if (string.IsNullOrWhiteSpace(streamUrl))
             {
                 ViewModel.SetPlaybackError("No playable stream URL was provided.");
@@ -92,6 +94,7 @@ namespace StreamioX.App.Views
                 return;
             }
 
+            ShowLoadingOverlay("Preparing player...");
             ShowOsd();
             await PlayWithFFmpegAsync(streamUrl, title, seriesTitle, requestHeaders);
         }
@@ -100,6 +103,7 @@ namespace StreamioX.App.Views
             System.Collections.Generic.IReadOnlyDictionary<string, string>? requestHeaders = null)
         {
             var stage = "Preparing player";
+            ShowLoadingOverlay(stage);
             try
             {
                 _mediaPlayer.Pause();
@@ -111,24 +115,37 @@ namespace StreamioX.App.Views
                 // so MediaPlayerElement retains its normal transport controls.
                 var playbackItem = await _ffmpegService.CreateMediaPlaybackItemAsync(
                     streamUrl,
-                    currentStage => stage = currentStage,
+                    currentStage =>
+                    {
+                        stage = currentStage;
+                        PlaybackDiagnostics.Write($"[PlayerPage] Stage: {currentStage}");
+                        _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                        {
+                            UpdateLoadingStatus(currentStage);
+                            ViewModel.SetStreamingStatus($"Loading: {currentStage}");
+                        });
+                    },
                     requestHeaders);
 
                 stage = "Assigning FFmpeg item to MediaPlayer";
                 _playbackItem = playbackItem;
                 _mediaPlayer.Source = playbackItem;
+                PlaybackDiagnostics.Write("[PlayerPage] MediaPlayer.Source assigned FFmpeg MediaPlaybackItem.");
 
                 stage = "Starting playback";
+                PlaybackDiagnostics.Write("[PlayerPage] Calling MediaPlayer.Play().");
                 _mediaPlayer.Play();
 
-                ViewModel.SetStreamingStatus("Playing...");
+                // Keep the overlay up until the playback session confirms it is playing.
+                ViewModel.SetStreamingStatus("Waiting for playback to start...");
             }
             catch (Exception ex)
             {
                 var details = $"FFmpeg playback failed during: {stage}\n" +
                     $"HRESULT: 0x{ex.HResult:X8}\n" +
                     ex.ToString();
-                System.Diagnostics.Debug.WriteLine(details);
+                PlaybackDiagnostics.Write(details);
+                HideLoadingOverlay();
                 ViewModel.SetPlaybackError(details);
             }
         }
@@ -215,20 +232,50 @@ namespace StreamioX.App.Views
             ShowOsd();
         }
 
+        private void ShowLoadingOverlay(string status)
+        {
+            if (LoadingOverlay == null)
+                return;
+
+            UpdateLoadingStatus(status);
+            LoadingOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void UpdateLoadingStatus(string status)
+        {
+            if (LoadingStatusText != null)
+                LoadingStatusText.Text = status;
+        }
+
+        private void HideLoadingOverlay()
+        {
+            if (LoadingOverlay != null)
+                LoadingOverlay.Visibility = Visibility.Collapsed;
+        }
+
         private void MediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
         {
             var error = $"Playback failed (0x{args.ExtendedErrorCode.HResult:X8}): {args.ErrorMessage}";
-            System.Diagnostics.Debug.WriteLine($"[Playback] MediaPlayer.MediaFailed: {error}");
+            PlaybackDiagnostics.Write($"[Playback] MediaPlayer.MediaFailed: {error}");
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
-                ViewModel.SetPlaybackError(error));
+            {
+                HideLoadingOverlay();
+                ViewModel.SetPlaybackError(error);
+            });
         }
 
         private void PlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
         {
-            System.Diagnostics.Debug.WriteLine($"[Playback] MediaPlayer state changed: {sender.PlaybackState}; position: {sender.Position}; duration: {sender.NaturalDuration}.");
+            PlaybackDiagnostics.Write($"[Playback] MediaPlayer state changed: {sender.PlaybackState}; position: {sender.Position}; duration: {sender.NaturalDuration}.");
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
-                ViewModel.SetPlaying(sender.PlaybackState == MediaPlaybackState.Playing);
+                var isPlaying = sender.PlaybackState == MediaPlaybackState.Playing;
+                ViewModel.SetPlaying(isPlaying);
+                if (isPlaying)
+                {
+                    HideLoadingOverlay();
+                    ViewModel.SetStreamingStatus("Playing...");
+                }
 
                 // Update play/pause icon
                 try

@@ -12,6 +12,27 @@
                             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                             AreTransportControlsEnabled="False"/>
 
+        <!-- Stream loading overlay remains visible until MediaPlayer reports Playing. -->
+        <Grid x:Name="LoadingOverlay" Background="#CC05060A"
+              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+              IsHitTestVisible="True" Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Spacing="20" Width="360">
+                <ProgressRing Width="64" Height="64" IsActive="True"
+                              Foreground="{StaticResource AccentBrush}"
+                              HorizontalAlignment="Center"/>
+                <TextBlock Text="Loading stream"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           FontSize="22" FontWeight="SemiBold"
+                           TextAlignment="Center"/>
+                <TextBlock x:Name="LoadingStatusText"
+                           Text="Preparing player..."
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           FontSize="14" TextAlignment="Center"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+        </Grid>
+
         <!-- Top Header Bar -->
         <Grid x:Name="TopControls" VerticalAlignment="Top" Padding="28,24" Background="#D9000000"
               BorderBrush="{StaticResource BorderDefaultBrush}" BorderThickness="0,0,0,1">

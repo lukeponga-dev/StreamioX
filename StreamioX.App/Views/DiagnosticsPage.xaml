@@ -1,9 +1,24 @@
-﻿<Page
+<Page
     x:Class="StreamioX.App.Views.DiagnosticsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Background="#05060A">
-    <Grid>
-        <TextBlock Text="Diagnostics Page" Foreground="White" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    Background="#05060A"
+    XYFocusKeyboardNavigation="Enabled">
+    <Grid Padding="48">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18" MaxWidth="720">
+            <TextBlock Text="StreamioX Diagnostics" Foreground="White" FontSize="32" FontWeight="Bold"/>
+            <TextBlock Text="Playback verification" Foreground="#A1A1AA" FontSize="18"/>
+            <TextBlock Text="Launch a public-domain sample video through the same FFmpegInteropX pipeline used by Stremio streams. This temporary test uses a direct HTTPS MP4 and does not contact torrent providers."
+                       Foreground="#A1A1AA" FontSize="15" TextWrapping="Wrap"/>
+            <Button Content="Play Big Buck Bunny test video"
+                    Click="PlayBigBuckBunny_Click"
+                    HorizontalAlignment="Left"
+                    Padding="24,14"
+                    Background="#7B5CFF"
+                    Foreground="White"
+                    FontSize="17"/>
+            <TextBlock Text="Source: Big Buck Bunny 720p H.264 MP4 sample (10 seconds)"
+                       Foreground="#737B8C" FontSize="12"/>
+        </StackPanel>
     </Grid>
 </Page>

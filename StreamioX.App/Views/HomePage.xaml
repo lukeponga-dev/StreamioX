@@ -56,6 +56,9 @@
                                 <Button x:Name="HeroRefreshButton" Content="Refresh"
                                         Style="{StaticResource SecondaryButtonStyle}"
                                         Click="Refresh_Click" XYFocusKeyboardNavigation="Enabled"/>
+                                <Button Content="Playback Test"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="PlaybackTest_Click" XYFocusKeyboardNavigation="Enabled"/>
                             </StackPanel>
                         </StackPanel>
                         <ProgressRing x:Name="LoadingRing" IsActive="True" Width="34" Height="34"

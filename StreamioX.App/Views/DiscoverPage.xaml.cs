@@ -136,7 +136,8 @@ namespace StreamioX.App.Views
                 VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 ZoomMode = ZoomMode.Disabled
             };
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14 };
+            // Leave room for the Xbox focus scale so adjacent poster cards do not collide.
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 22 };
             horizontal.Content = row;
             CatalogRowsPanel.Children.Add(horizontal);
 
@@ -156,10 +157,24 @@ namespace StreamioX.App.Views
                 }
                 var content = new StackPanel { Spacing = 7 };
                 content.Children.Add(poster);
-                content.Children.Add(new TextBlock { Text = movie.Title ?? "Untitled", Foreground = new SolidColorBrush(Colors.White), FontSize = 14, FontWeight = Windows.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, MaxWidth = 142, MaxHeight = 40 });
+                content.Children.Add(new TextBlock
+                {
+                    Text = movie.Title ?? "Untitled",
+                    Foreground = new SolidColorBrush(Colors.White),
+                    FontSize = 14,
+                    FontWeight = Windows.UI.Text.FontWeights.SemiBold,
+                    TextWrapping = TextWrapping.Wrap,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxLines = 2,
+                    MaxWidth = 142,
+                    MinHeight = 36,
+                    MaxHeight = 40
+                });
                 var card = new Button
                 {
-                    Width = 158, MinHeight = 258, Padding = new Thickness(7),
+                    Width = 158, MinHeight = 270, Padding = new Thickness(7),
+                    Margin = new Thickness(3, 5, 3, 10),
+                    UseSystemFocusVisuals = true,
                     Background = new SolidColorBrush(Color.FromArgb(255, 16, 18, 29)),
                     BorderBrush = new SolidColorBrush(Color.FromArgb(255, 48, 46, 67)),
                     BorderThickness = new Thickness(1), Content = content, Tag = movie

@@ -82,6 +82,21 @@ namespace StreamioX.App.Views
             }
         }
 
+        private void PosterImage_ImageOpened(object sender, Windows.UI.Xaml.RoutedEventArgs e)
+        {
+            PosterFallback.Visibility = Visibility.Collapsed;
+        }
+
+        private void Artwork_ImageFailed(object sender, Windows.UI.Xaml.ExceptionRoutedEventArgs e)
+        {
+            if (sender is Image image)
+            {
+                image.Source = null;
+                if (ReferenceEquals(image, PosterImage))
+                    PosterFallback.Visibility = Visibility.Visible;
+            }
+        }
+
         private void EpisodeButton_Click(object sender, Windows.UI.Xaml.RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is Video episode)
@@ -117,10 +132,26 @@ namespace StreamioX.App.Views
                 await ViewModel.InitializeAsync(selectedMovie);
                 RenderContentRows();
                 PosterImage.Source = null;
+                BackdropImage.Source = null;
+                PosterFallback.Visibility = Visibility.Visible;
+
                 if (!string.IsNullOrWhiteSpace(ViewModel.PosterUrl) &&
-                    Uri.TryCreate(ViewModel.PosterUrl, UriKind.Absolute, out var posterUri))
+                    Uri.TryCreate(ViewModel.PosterUrl, UriKind.Absolute, out var posterUri) &&
+                    (posterUri.Scheme == Uri.UriSchemeHttps || posterUri.Scheme == Uri.UriSchemeHttp))
                 {
                     PosterImage.Source = new BitmapImage(posterUri);
+                }
+
+                // Cinemeta often has no separate backdrop; use the poster as a soft visual fallback.
+                var backdropUrl = ViewModel.SelectedMovie?.BackgroundUrl;
+                if (string.IsNullOrWhiteSpace(backdropUrl))
+                    backdropUrl = ViewModel.PosterUrl;
+
+                if (!string.IsNullOrWhiteSpace(backdropUrl) &&
+                    Uri.TryCreate(backdropUrl, UriKind.Absolute, out var backdropUri) &&
+                    (backdropUri.Scheme == Uri.UriSchemeHttps || backdropUri.Scheme == Uri.UriSchemeHttp))
+                {
+                    BackdropImage.Source = new BitmapImage(backdropUri);
                 }
             }
         }

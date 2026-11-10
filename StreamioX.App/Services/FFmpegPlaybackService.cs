@@ -1,29 +1,46 @@
-using System;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Threading;
-using System.Threading.Tasks;
-using FFmpegInteropX;
-using Windows.Foundation.Collections;
-using Windows.Media.Playback;
-
 namespace StreamioX.App.Services
 {
+    using FFmpegInteropX;
+    using System;
+    using System.Net.Http;
+    using System.Net.Http.Headers;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using Windows.Foundation.Collections;
+    using Windows.Media.Playback;
+
     /// <summary>
     /// Validates direct network streams before opening them with FFmpegInteropX.
-    /// The FFmpegMediaSource reference must remain alive for the playback session.
+    /// The FFmpegMediaSource reference must remain alive for the playback session
     /// </summary>
     public sealed class FFmpegPlaybackService
     {
+        /// <summary>
+        /// Defines the UserAgent
+        /// </summary>
         private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) StreamioX/1.0";
+
+        /// <summary>
+        /// Defines the Http
+        /// </summary>
         private static readonly HttpClient Http = new HttpClient(
             new HttpClientHandler { AllowAutoRedirect = true })
         {
             Timeout = Timeout.InfiniteTimeSpan
         };
 
+        /// <summary>
+        /// Defines the _mediaSource
+        /// </summary>
         private FFmpegMediaSource? _mediaSource;
 
+        /// <summary>
+        /// The CreateMediaPlaybackItemAsync
+        /// </summary>
+        /// <param name="streamUrl">The streamUrl<see cref="string"/></param>
+        /// <param name="reportStage">The reportStage<see cref="Action{string}?"/></param>
+        /// <param name="requestHeaders">The requestHeaders<see cref="System.Collections.Generic.IReadOnlyDictionary{string, string}?"/></param>
+        /// <returns>The <see cref="Task{MediaPlaybackItem}"/></returns>
         public async Task<MediaPlaybackItem> CreateMediaPlaybackItemAsync(
             string streamUrl,
             Action<string>? reportStage = null,
@@ -42,7 +59,7 @@ namespace StreamioX.App.Services
             // login pages, blocked hosts and broken redirects before FFmpeg opens them.
             reportStage?.Invoke("Checking direct stream HTTP response");
             var resolvedUri = await ResolveAndValidateStreamAsync(uri, requestHeaders).ConfigureAwait(true);
-            System.Diagnostics.Debug.WriteLine($"[Playback] Probe completed. Original host: {uri.Host}; final host: {resolvedUri.Host}. FFmpeg will receive the ORIGINAL URL.");
+            PlaybackDiagnostics.Write($"[Playback] Probe completed. Original host: {uri.Host}; final host: {resolvedUri.Host}. FFmpeg will receive the ORIGINAL URL.");
 
             reportStage?.Invoke("Configuring FFmpeg network input");
             // FFmpegInteropX.UWP 2.1 ships with native D3D11 hardware decoding
@@ -66,16 +83,16 @@ namespace StreamioX.App.Services
             config.General.ReadAheadBufferSize = 32 * 1024 * 1024;
 
             reportStage?.Invoke("Opening original stream URL with FFmpegInteropX");
-            System.Diagnostics.Debug.WriteLine("[Playback] Creating FFmpegMediaSource from original URI.");
-            System.Diagnostics.Debug.WriteLine($"[Playback] FFmpeg input scheme: {uri.Scheme}; host: {uri.Host}; port: {uri.Port}; path length: {uri.AbsolutePath.Length}.");
-            System.Diagnostics.Debug.WriteLine($"[Playback] Forwarding {requestHeaders?.Count ?? 0} request header(s) to FFmpeg; values are intentionally not logged.");
+            PlaybackDiagnostics.Write("[Playback] Creating FFmpegMediaSource from original URI.");
+            PlaybackDiagnostics.Write($"[Playback] FFmpeg input scheme: {uri.Scheme}; host: {uri.Host}; port: {uri.Port}; path length: {uri.AbsolutePath.Length}.");
+            PlaybackDiagnostics.Write($"[Playback] Forwarding {requestHeaders?.Count ?? 0} request header(s) to FFmpeg; values are intentionally not logged.");
             try
             {
                 // The probe is diagnostic only. Do not substitute its redirect target:
                 // signed URLs and session-bound providers may require the original URL.
                 _mediaSource = await FFmpegMediaSource.CreateFromUriAsync(
                     uri.AbsoluteUri, config);
-                System.Diagnostics.Debug.WriteLine(_mediaSource != null
+                PlaybackDiagnostics.Write(_mediaSource != null
                     ? "[Playback] FFmpegMediaSource created successfully."
                     : "[Playback] FFmpegMediaSource returned null.");
             }
@@ -93,7 +110,7 @@ namespace StreamioX.App.Services
 
             reportStage?.Invoke("Creating MediaPlaybackItem");
             var playbackItem = _mediaSource.CreateMediaPlaybackItem();
-            System.Diagnostics.Debug.WriteLine(playbackItem != null
+            PlaybackDiagnostics.Write(playbackItem != null
                 ? "[Playback] MediaPlaybackItem created successfully."
                 : "[Playback] MediaPlaybackItem returned null.");
 
@@ -104,6 +121,12 @@ namespace StreamioX.App.Services
             return playbackItem;
         }
 
+        /// <summary>
+        /// The ResolveAndValidateStreamAsync
+        /// </summary>
+        /// <param name="uri">The uri<see cref="Uri"/></param>
+        /// <param name="requestHeaders">The requestHeaders<see cref="System.Collections.Generic.IReadOnlyDictionary{string, string}?"/></param>
+        /// <returns>The <see cref="Task{Uri}"/></returns>
         private static async Task<Uri> ResolveAndValidateStreamAsync(
             Uri uri,
             System.Collections.Generic.IReadOnlyDictionary<string, string>? requestHeaders)
@@ -123,9 +146,9 @@ namespace StreamioX.App.Services
             var contentType = response.Content.Headers.ContentType?.MediaType ?? "unknown";
             var finalUri = response.RequestMessage?.RequestUri ?? uri;
 
-            System.Diagnostics.Debug.WriteLine($"[Playback] HTTP probe: {(int)response.StatusCode} {response.ReasonPhrase ?? string.Empty}");
-            System.Diagnostics.Debug.WriteLine($"[Playback] Original URI host: {uri.Host}; final URI host: {finalUri.Host}; redirected: {!Uri.Compare(uri, finalUri, UriComponents.AbsoluteUri, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase).Equals(0)}");
-            System.Diagnostics.Debug.WriteLine($"[Playback] Content-Type: {contentType}; Content-Length: {response.Content.Headers.ContentLength?.ToString() ?? "unknown"}");
+            PlaybackDiagnostics.Write($"[Playback] HTTP probe: {(int)response.StatusCode} {response.ReasonPhrase ?? string.Empty}");
+            PlaybackDiagnostics.Write($"[Playback] Original URI host: {uri.Host}; final URI host: {finalUri.Host}; redirected: {!Uri.Compare(uri, finalUri, UriComponents.AbsoluteUri, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase).Equals(0)}");
+            PlaybackDiagnostics.Write($"[Playback] Content-Type: {contentType}; Content-Length: {response.Content.Headers.ContentLength?.ToString() ?? "unknown"}");
             foreach (var header in response.Headers)
             {
                 if (header.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase) ||
@@ -133,11 +156,11 @@ namespace StreamioX.App.Services
                     header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase) ||
                     header.Key.Equals("Proxy-Authorization", StringComparison.OrdinalIgnoreCase))
                     continue;
-                System.Diagnostics.Debug.WriteLine($"[Playback] Response header: {header.Key}");
+                PlaybackDiagnostics.Write($"[Playback] Response header: {header.Key}");
             }
             foreach (var header in response.Content.Headers)
             {
-                System.Diagnostics.Debug.WriteLine($"[Playback] Content header: {header.Key}");
+                PlaybackDiagnostics.Write($"[Playback] Content header: {header.Key}");
             }
 
             if (!response.IsSuccessStatusCode)
@@ -159,6 +182,11 @@ namespace StreamioX.App.Services
             return finalUri;
         }
 
+        /// <summary>
+        /// The ApplyRequestHeaders
+        /// </summary>
+        /// <param name="request">The request<see cref="HttpRequestMessage"/></param>
+        /// <param name="headers">The headers<see cref="System.Collections.Generic.IReadOnlyDictionary{string, string}?"/></param>
         private static void ApplyRequestHeaders(HttpRequestMessage request,
             System.Collections.Generic.IReadOnlyDictionary<string, string>? headers)
         {
@@ -177,6 +205,11 @@ namespace StreamioX.App.Services
             }
         }
 
+        /// <summary>
+        /// The BuildFfmpegHeaders
+        /// </summary>
+        /// <param name="headers">The headers<see cref="System.Collections.Generic.IReadOnlyDictionary{string, string}?"/></param>
+        /// <returns>The <see cref="string"/></returns>
         private static string BuildFfmpegHeaders(
             System.Collections.Generic.IReadOnlyDictionary<string, string>? headers)
         {
@@ -196,6 +229,9 @@ namespace StreamioX.App.Services
             return builder.ToString();
         }
 
+        /// <summary>
+        /// The Stop
+        /// </summary>
         public void Stop()
         {
             // PlayerPage must clear MediaPlayer.Source before releasing this reference.

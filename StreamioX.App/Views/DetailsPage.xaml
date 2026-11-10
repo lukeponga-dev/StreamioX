@@ -11,15 +11,40 @@
         <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     </Page.Resources>
 
-    <Grid Padding="48,27,48,27">
+    <Grid>
+        <!-- Artwork is decorative only; the gradient remains as a reliable fallback. -->
+        <Grid Height="440" VerticalAlignment="Top" IsHitTestVisible="False">
+            <Image x:Name="BackdropImage" Stretch="UniformToFill" Opacity="0.34"
+                   ImageFailed="Artwork_ImageFailed"/>
+            <Grid>
+                <Grid.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#0005060A" Offset="0.0"/>
+                        <GradientStop Color="#6605060A" Offset="0.55"/>
+                        <GradientStop Color="#FF05060A" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </Grid.Background>
+            </Grid>
+        </Grid>
+
+        <Grid Padding="48,27,48,27">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="280"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <StackPanel Grid.Column="0" Spacing="14" VerticalAlignment="Top">
-            <Border CornerRadius="12" Height="420" Background="#171923">
-                <Image x:Name="PosterImage" Stretch="UniformToFill"/>
+            <Border CornerRadius="12" Height="420" Background="#171923"
+                    BorderBrush="#303448" BorderThickness="1">
+                <Grid>
+                    <TextBlock x:Name="PosterFallback" Text="ARTWORK UNAVAILABLE"
+                               Foreground="#FFB9B2D0" FontSize="13"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextAlignment="Center" TextWrapping="Wrap"/>
+                    <Image x:Name="PosterImage" Stretch="UniformToFill"
+                           ImageOpened="PosterImage_ImageOpened"
+                           ImageFailed="Artwork_ImageFailed"/>
+                </Grid>
             </Border>
             <TextBlock Text="{Binding ContentTypeText}" Foreground="{StaticResource FocusAccentBrush}" FontSize="13" FontWeight="Bold"/>
             <TextBlock Text="{Binding RatingText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16"/>
@@ -94,5 +119,6 @@
                 <StackPanel x:Name="StreamsRow" Spacing="8"/>
             </StackPanel>
         </ScrollViewer>
+        </Grid>
     </Grid>
 </Page>

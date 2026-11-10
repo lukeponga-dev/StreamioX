@@ -9,7 +9,7 @@
   <Identity
     Name="60041d50-94b9-4e14-a40d-16d2c929fffa"
     Publisher="CN=lukeg"
-    Version="1.0.0.0" />
+    Version="1.0.0.1" />
 
   <mp:PhoneIdentity PhoneProductId="60041d50-94b9-4e14-a40d-16d2c929fffa" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

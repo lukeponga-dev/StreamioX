@@ -1,30 +1,25 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
+using StreamioX.App.Models;
+using StreamioX.App.Views;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Navigation;
-
-// The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=234238
 
 namespace StreamioX.App.Views
 {
-    /// <summary>
-    /// An empty page that can be used on its own or navigated to within a Frame.
-    /// </summary>
     public sealed partial class DiagnosticsPage : Page
     {
+        private const string BigBuckBunnyUrl =
+            "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4";
+
         public DiagnosticsPage()
         {
-            this.InitializeComponent();
+            InitializeComponent();
+        }
+
+        private void PlayBigBuckBunny_Click(object sender, RoutedEventArgs e)
+        {
+            StreamioX.App.Services.PlaybackDiagnostics.Write("[PlaybackTest] Big Buck Bunny button selected; navigating to PlayerPage.");
+            Frame.Navigate(typeof(PlayerPage),
+                new PlaybackRequest(BigBuckBunnyUrl, "Big Buck Bunny — FFmpeg test"));
         }
     }
 }
