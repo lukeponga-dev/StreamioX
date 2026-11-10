@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" IgnorableNamespaces="uap mp">
-  <Identity Name="60041d50-94b9-4e14-a40d-16d2c929fffa" Publisher="CN=Kiwi Cloud" Version="1.0.1.0" />
+  <Identity Name="pongadev.StreamioX" Publisher="CN=72F532F7-EE7F-4B17-8DC0-38902DFF476C" Version="1.0.1.0" />
   <mp:PhoneIdentity PhoneProductId="60041d50-94b9-4e14-a40d-16d2c929fffa" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>StreamioX</DisplayName>
