@@ -31,9 +31,13 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] private bool isLoadingMetadata;
         [ObservableProperty] private string? errorMessage;
         [ObservableProperty] private bool isSavedInLibrary;
+        [ObservableProperty] public partial bool HasResumeProgress { get; set; }
+        [ObservableProperty] public partial bool IsResumeRequested { get; set; }
+        [ObservableProperty] public partial string ResumeButtonText { get; set; } = "Resume Watching";
         // Partial-property generation is WinRT/NativeAOT compatible.
         [ObservableProperty] public partial bool IsSeries { get; set; }
         [ObservableProperty] private string libraryButtonText = "Add to Library";
+        private LibraryEntry? _playbackEntry;
 
         // Flatten nested metadata into bindable page properties. This avoids UWP
         // nested-property binding and string-to-ImageSource conversion issues.
@@ -77,12 +81,18 @@ namespace StreamioX.App.ViewModels
             SelectedMovie = movie;
             IsSeries = string.Equals(movie.Type, "series", StringComparison.OrdinalIgnoreCase);
             IsSavedInLibrary = await _libraryService.IsSavedAsync(movie.Type ?? "movie", movie.Id ?? string.Empty).ConfigureAwait(true);
+            var libraryEntries = await _libraryService.GetEntriesAsync().ConfigureAwait(true);
+            _playbackEntry = libraryEntries.FirstOrDefault(entry =>
+                string.Equals(entry.Movie?.Id, movie.Id, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.Movie?.Type ?? "movie", movie.Type ?? "movie", StringComparison.OrdinalIgnoreCase));
+            IsResumeRequested = false;
             LibraryButtonText = IsSavedInLibrary ? "Remove from Library" : "Add to Library";
             NotifyDetailsProperties();
             Episodes.Clear();
             Streams.Clear();
             SelectedEpisode = null;
             ErrorMessage = null;
+            UpdateResumeAvailability();
             OnPropertyChanged(nameof(GenreText));
             OnPropertyChanged(nameof(RatingText));
             OnPropertyChanged(nameof(RuntimeText));
@@ -108,6 +118,7 @@ namespace StreamioX.App.ViewModels
                     foreach (var episode in SelectedMovie.Videos)
                         Episodes.Add(episode);
                 }
+                UpdateResumeAvailability();
                 OnPropertyChanged(nameof(EpisodesVisibility));
 
                 if (string.Equals(SelectedMovie?.Type, "series", StringComparison.OrdinalIgnoreCase)
@@ -149,8 +160,55 @@ namespace StreamioX.App.ViewModels
         private async Task PlayEpisodeAsync(Video? episode)
         {
             if (episode == null || string.IsNullOrWhiteSpace(episode.Id)) return;
+            IsResumeRequested = false;
             SelectedEpisode = episode;
             await LoadStreamsAsync(episode.Id, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        [RelayCommand]
+        private async Task ResumeWatchingAsync()
+        {
+            if (!HasResumeProgress || _playbackEntry == null)
+                return;
+
+            IsResumeRequested = true;
+            if (IsSeries)
+            {
+                var episodeId = _playbackEntry.LastEpisodeId;
+                var episode = Episodes.FirstOrDefault(item =>
+                    string.Equals(item.Id, episodeId, StringComparison.OrdinalIgnoreCase));
+                if (episode == null)
+                {
+                    ErrorMessage = "The last watched episode is no longer available in this catalog.";
+                    IsResumeRequested = false;
+                    return;
+                }
+
+                SelectedEpisode = episode;
+                await LoadStreamsAsync(episode.Id!, CancellationToken.None).ConfigureAwait(true);
+            }
+        }
+
+        private void UpdateResumeAvailability()
+        {
+            var hasSavedPosition = _playbackEntry != null &&
+                _playbackEntry.DurationSeconds > 0 &&
+                _playbackEntry.PositionSeconds > 0 &&
+                _playbackEntry.PositionSeconds / _playbackEntry.DurationSeconds < 0.95;
+            var hasLastEpisode = !IsSeries || Episodes.Any(episode =>
+                !string.IsNullOrWhiteSpace(_playbackEntry?.LastEpisodeId) &&
+                string.Equals(episode.Id, _playbackEntry.LastEpisodeId, StringComparison.OrdinalIgnoreCase));
+
+            HasResumeProgress = hasSavedPosition && hasLastEpisode;
+            ResumeButtonText = HasResumeProgress
+                ? $"Resume Watching · {FormatResumeTime(_playbackEntry!.PositionSeconds)}"
+                : "Resume Watching";
+        }
+
+        private static string FormatResumeTime(double seconds)
+        {
+            var time = TimeSpan.FromSeconds(Math.Max(0, seconds));
+            return time.TotalHours >= 1 ? time.ToString(@"h\:mm\:ss") : time.ToString(@"m\:ss");
         }
 
         private async Task LoadStreamsAsync(string contentId, CancellationToken cancellationToken)
@@ -233,8 +291,16 @@ namespace StreamioX.App.ViewModels
             var requestHeaders = forwardProxyHeaders
                 ? stream.BehaviorHints?.ProxyHeaders?.Request
                 : null;
-            var request = new PlaybackRequest(streamUrl, title,
-                requestHeaders: requestHeaders);
+            var request = new PlaybackRequest(
+                streamUrl,
+                title,
+                seriesTitle: SelectedMovie?.Title,
+                requestHeaders: requestHeaders,
+                type: SelectedMovie?.Type ?? "movie",
+                id: SelectedMovie?.Id,
+                episodeId: SelectedEpisode?.Id,
+                movie: SelectedMovie,
+                resumePositionSeconds: IsResumeRequested ? _playbackEntry?.PositionSeconds ?? 0 : 0);
             if (!_navigationService.NavigateTo(NavigationRoute.Player, request))
                 ErrorMessage = "The player could not be opened. Please try selecting the stream again.";
         }

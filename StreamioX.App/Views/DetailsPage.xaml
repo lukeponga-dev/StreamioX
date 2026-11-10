@@ -60,6 +60,11 @@
                 </StackPanel>
 
                 <Button x:Name="LibraryButton" Content="{Binding LibraryButtonText}" Command="{Binding ToggleLibraryCommand}" HorizontalAlignment="Left" Padding="20,10" Background="{StaticResource SurfaceBrush}" Foreground="{StaticResource TextPrimaryBrush}" Style="{StaticResource XboxFocusCardStyle}"/>
+                <Button x:Name="ResumeButton" Content="{Binding ResumeButtonText}" Click="ResumeButton_Click"
+                        Visibility="{Binding HasResumeProgress, Converter={StaticResource BoolToVisibilityConverter}}"
+                        HorizontalAlignment="Left" Padding="20,10"
+                        Background="{StaticResource FocusAccentBrush}" Foreground="White"
+                        Style="{StaticResource XboxFocusCardStyle}"/>
 
                 <TextBlock Text="{Binding DescriptionText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16" TextWrapping="Wrap" LineHeight="24"/>
                 

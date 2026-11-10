@@ -8,6 +8,8 @@ namespace StreamioX.App.Models
     public sealed partial class LibraryEntry
     {
         [JsonPropertyName("movie")] public Movie? Movie { get; set; }
+        // Existing library files omit this field; default true preserves their saved state.
+        [JsonPropertyName("isSaved")] public bool IsSaved { get; set; } = true;
         [JsonPropertyName("addedUtc")] public DateTimeOffset AddedUtc { get; set; }
         [JsonPropertyName("lastPlayedUtc")] public DateTimeOffset? LastPlayedUtc { get; set; }
         [JsonPropertyName("positionSeconds")] public double PositionSeconds { get; set; }

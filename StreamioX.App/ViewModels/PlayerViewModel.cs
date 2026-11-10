@@ -13,6 +13,7 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] private string streamingStatus = "Ready to play";
         [ObservableProperty] private string currentTime = "00:00";
         [ObservableProperty] private string totalTime = "00:00";
+        [ObservableProperty] private string remainingTime = "-00:00";
         [ObservableProperty] private string currentTimeDisplay = "00:00 / 00:00";
         [ObservableProperty] private double playbackProgress;
 
@@ -39,6 +40,8 @@ namespace StreamioX.App.ViewModels
         {
             CurrentTime = FormatTime(current);
             TotalTime = FormatTime(total);
+            var remaining = TimeSpan.FromSeconds(Math.Max(0, total.TotalSeconds - current.TotalSeconds));
+            RemainingTime = $"-{FormatTime(remaining)}";
             CurrentTimeDisplay = $"{FormatTime(current)} / {FormatTime(total)}";
             PlaybackProgress = total.TotalSeconds > 0 ? (current.TotalSeconds / total.TotalSeconds) * 100 : 0;
         }

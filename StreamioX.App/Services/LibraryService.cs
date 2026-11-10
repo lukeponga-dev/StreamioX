@@ -31,7 +31,7 @@ namespace StreamioX.App.Services
         public async Task<bool> IsSavedAsync(string type, string id)
         {
             var entries = await GetEntriesAsync().ConfigureAwait(false);
-            return entries.Any(x => Matches(x, type, id));
+            return entries.Any(x => x.IsSaved && Matches(x, type, id));
         }
 
         public async Task SaveAsync(Movie movie)
@@ -45,7 +45,10 @@ namespace StreamioX.App.Services
                 if (existing == null)
                     entries.Add(new LibraryEntry { Movie = movie, AddedUtc = DateTimeOffset.UtcNow });
                 else
+                {
                     existing.Movie = movie;
+                    existing.IsSaved = true;
+                }
                 await SaveFileAsync(entries).ConfigureAwait(false);
             }
             finally { _gate.Release(); }
@@ -63,15 +66,35 @@ namespace StreamioX.App.Services
             finally { _gate.Release(); }
         }
 
-        public async Task UpdateProgressAsync(string type, string id, double positionSeconds, double durationSeconds, string? episodeId = null)
+        public async Task UpdateProgressAsync(string type, string id, double positionSeconds, double durationSeconds,
+            string? episodeId = null, Movie? movie = null)
         {
+            if (string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(id))
+                return;
+
             await _gate.WaitAsync().ConfigureAwait(false);
             try
             {
                 var entries = await LoadAsync().ConfigureAwait(false);
                 var entry = entries.FirstOrDefault(x => Matches(x, type, id));
+
+                // Playback creates a Continue Watching entry even when the title
+                // has not separately been added to the user's saved library.
+                if (entry == null && movie != null && !string.IsNullOrWhiteSpace(movie.Id))
+                {
+                    entry = new LibraryEntry
+                    {
+                        Movie = movie,
+                        IsSaved = false,
+                        AddedUtc = DateTimeOffset.UtcNow
+                    };
+                    entries.Add(entry);
+                }
+
                 if (entry != null)
                 {
+                    if (movie != null)
+                        entry.Movie = movie;
                     entry.PositionSeconds = Math.Max(0, positionSeconds);
                     entry.DurationSeconds = Math.Max(0, durationSeconds);
                     entry.LastEpisodeId = episodeId;

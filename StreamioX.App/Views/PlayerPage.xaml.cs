@@ -19,7 +19,12 @@ namespace StreamioX.App.Views
         private readonly FFmpegPlaybackService _ffmpegService;
         private readonly DispatcherTimer _playbackTimer;
         private readonly DispatcherTimer _osdTimer;
+        private readonly ILibraryService _libraryService;
+        private readonly System.Threading.SemaphoreSlim _progressSaveGate = new(1, 1);
         private MediaPlaybackItem? _playbackItem;
+        private PlaybackRequest? _playbackRequest;
+        private DateTimeOffset _lastProgressSaveUtc = DateTimeOffset.UtcNow;
+        private bool _resumeApplied = true;
         private bool _updatingProgressSlider;
 
         public PlayerPage()
@@ -37,6 +42,7 @@ namespace StreamioX.App.Views
             FocusHelper.AttachXboxFocus(AudioButton);
             _mediaPlayer = new MediaPlayer();
             _ffmpegService = AppServices.GetRequiredService<FFmpegPlaybackService>();
+            _libraryService = AppServices.GetRequiredService<ILibraryService>();
             PlaybackSpeedBox.SelectionChanged += PlaybackSpeed_Changed;
             PlayerWidget.SetMediaPlayer(_mediaPlayer);
             _mediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
@@ -51,7 +57,12 @@ namespace StreamioX.App.Views
             _osdTimer.Tick += (_, _) =>
             {
                 _osdTimer.Stop();
-                SetOsdVisible(false);
+
+                // Never hide the controls while paused or after playback has ended.
+                if (_mediaPlayer.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+                    SetOsdVisible(false);
+                else
+                    SetOsdVisible(true);
             };
 
             Loaded += PlayerPage_Loaded;
@@ -66,18 +77,13 @@ namespace StreamioX.App.Views
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
-            var streamUrl = e.Parameter is PlaybackRequest request
-                ? request.StreamUrl
-                : e.Parameter as string;
-            var title = e.Parameter is PlaybackRequest playbackRequest
-                ? playbackRequest.Title
-                : "Now Playing";
-            var seriesTitle = e.Parameter is PlaybackRequest pbRequest
-                ? pbRequest.SeriesTitle
-                : null;
-            var requestHeaders = e.Parameter is PlaybackRequest headerRequest
-                ? headerRequest.RequestHeaders
-                : null;
+            _playbackRequest = e.Parameter as PlaybackRequest;
+            _lastProgressSaveUtc = DateTimeOffset.UtcNow;
+            _resumeApplied = (_playbackRequest?.ResumePositionSeconds ?? 0) <= 0;
+            var streamUrl = _playbackRequest?.StreamUrl ?? e.Parameter as string;
+            var title = _playbackRequest?.Title ?? "Now Playing";
+            var seriesTitle = _playbackRequest?.SeriesTitle;
+            var requestHeaders = _playbackRequest?.RequestHeaders;
 
             PlaybackDiagnostics.Write($"[PlayerPage] Navigation received title '{title}'. Stream parameter present: {!string.IsNullOrWhiteSpace(streamUrl)}.");
 
@@ -222,7 +228,14 @@ namespace StreamioX.App.Views
         private void UpdatePlaybackTime(object? sender, object e)
         {
             var session = _mediaPlayer.PlaybackSession;
+            TryApplyResumePosition(session);
             ViewModel.UpdatePlaybackTime(session.Position, session.NaturalDuration);
+
+            if (_resumeApplied && session.PlaybackState == MediaPlaybackState.Playing &&
+                DateTimeOffset.UtcNow - _lastProgressSaveUtc >= TimeSpan.FromSeconds(15))
+            {
+                _ = SaveProgressAsync();
+            }
 
             // Update progress slider
             try
@@ -288,6 +301,81 @@ namespace StreamioX.App.Views
                 LoadingStatusText.Text = status;
         }
 
+        private static string FormatPlaybackTime(TimeSpan time) =>
+            time.TotalHours >= 1 ? time.ToString(@"h\:mm\:ss") : time.ToString(@"m\:ss");
+
+        private void TryApplyResumePosition(MediaPlaybackSession session)
+        {
+            if (_resumeApplied)
+                return;
+
+            var resumeSeconds = _playbackRequest?.ResumePositionSeconds ?? 0;
+            if (resumeSeconds <= 0)
+            {
+                _resumeApplied = true;
+                return;
+            }
+
+            if (session.NaturalDuration <= TimeSpan.Zero || !session.CanSeek)
+                return;
+
+            try
+            {
+                var targetSeconds = Math.Min(resumeSeconds, Math.Max(0, session.NaturalDuration.TotalSeconds - 1));
+                session.Position = TimeSpan.FromSeconds(targetSeconds);
+                _resumeApplied = true;
+                _lastProgressSaveUtc = DateTimeOffset.UtcNow;
+                PlaybackDiagnostics.Write($"[Playback] Resumed at {targetSeconds:0.0}s of {session.NaturalDuration.TotalSeconds:0.0}s.");
+                ViewModel.SetStreamingStatus($"Resumed from {FormatPlaybackTime(TimeSpan.FromSeconds(targetSeconds))}");
+            }
+            catch (Exception ex)
+            {
+                _resumeApplied = true;
+                PlaybackDiagnostics.Write($"[Playback] Could not restore resume position (0x{ex.HResult:X8}): {ex.Message}");
+            }
+        }
+
+        private async Task SaveProgressAsync()
+        {
+            var request = _playbackRequest;
+            if (request == null || string.IsNullOrWhiteSpace(request.Type) ||
+                string.IsNullOrWhiteSpace(request.Id) || !_resumeApplied)
+                return;
+
+            // Capture the playback snapshot before awaiting storage so navigation
+            // cannot clear MediaPlayer.Source before the final position is read.
+            var session = _mediaPlayer.PlaybackSession;
+            var duration = session.NaturalDuration.TotalSeconds;
+            var position = session.Position.TotalSeconds;
+            if (duration <= 0 || double.IsNaN(duration) || double.IsInfinity(duration) ||
+                double.IsNaN(position) || double.IsInfinity(position))
+                return;
+
+            _lastProgressSaveUtc = DateTimeOffset.UtcNow;
+            await _progressSaveGate.WaitAsync();
+            try
+            {
+                await _libraryService.UpdateProgressAsync(
+                    request.Type,
+                    request.Id,
+                    Math.Max(0, position),
+                    duration,
+                    request.EpisodeId,
+                    request.Movie).ConfigureAwait(true);
+
+                _lastProgressSaveUtc = DateTimeOffset.UtcNow;
+                PlaybackDiagnostics.Write($"[Playback] Saved progress for {request.Type}/{request.Id} at {position:0.0}s / {duration:0.0}s.");
+            }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.Write($"[Playback] Saving progress failed (0x{ex.HResult:X8}): {ex.Message}");
+            }
+            finally
+            {
+                _progressSaveGate.Release();
+            }
+        }
+
         private void HideLoadingOverlay()
         {
             if (LoadingOverlay != null)
@@ -316,6 +404,14 @@ namespace StreamioX.App.Views
                 {
                     HideLoadingOverlay();
                     ViewModel.SetStreamingStatus("Playing...");
+                    ShowOsd();
+                }
+                else
+                {
+                    // Paused, buffering, and ended states keep the transport UI available.
+                    ShowOsd();
+                    if (sender.PlaybackState == MediaPlaybackState.Paused && _resumeApplied)
+                        _ = SaveProgressAsync();
                 }
 
                 // Update play/pause icon
@@ -356,27 +452,70 @@ namespace StreamioX.App.Views
         {
             SetOsdVisible(true);
             _osdTimer.Stop();
-            _osdTimer.Start();
+
+            // Paused/ended playback keeps controls pinned; only active playback auto-hides.
+            if (_mediaPlayer.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+                _osdTimer.Start();
         }
 
         private void ToggleOsd()
         {
             var visible = CenterControls.Opacity < 0.5;
-            SetOsdVisible(visible);
-            _osdTimer.Stop();
-            if (visible)
-                _osdTimer.Start();
+            if (!visible)
+            {
+                // Do not allow the user to hide controls while playback is paused.
+                if (_mediaPlayer.PlaybackSession.PlaybackState != MediaPlaybackState.Playing)
+                {
+                    SetOsdVisible(true);
+                    return;
+                }
+
+                SetOsdVisible(false);
+                _osdTimer.Stop();
+                return;
+            }
+
+            ShowOsd();
+        }
+
+        private void PlayerPage_PointerMoved(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            ShowOsd();
+        }
+
+        private void PlayerPage_PointerPressed(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            ShowOsd();
         }
 
         private void PlayerPage_KeyDown(object sender, Windows.UI.Xaml.Input.KeyRoutedEventArgs e)
         {
+            // Any controller/keyboard activity reveals the OSD and restarts its hide timer.
+            ShowOsd();
+
             switch (e.Key)
             {
                 case Windows.System.VirtualKey.GamepadA:
-                case Windows.System.VirtualKey.Space:
+                    // Let the focused button/slider/selector handle A; only use A as a
+                    // play/pause shortcut when focus is on the video surface.
+                    if (Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is Button ||
+                        Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is ComboBox ||
+                        Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is Slider)
+                        break;
+
                     PlayPause_Click(this, new RoutedEventArgs());
                     e.Handled = true;
-                    ShowOsd();
+                    break;
+
+                case Windows.System.VirtualKey.Space:
+                case Windows.System.VirtualKey.K:
+                    if (Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is Button ||
+                        Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is ComboBox ||
+                        Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is Slider)
+                        break;
+
+                    PlayPause_Click(this, new RoutedEventArgs());
+                    e.Handled = true;
                     break;
 
                 case Windows.System.VirtualKey.GamepadX:
@@ -390,13 +529,8 @@ namespace StreamioX.App.Views
                     e.Handled = true;
                     break;
 
-                case Windows.System.VirtualKey.Left:
-                    SeekBy(TimeSpan.FromSeconds(-10));
-                    e.Handled = true;
-                    ShowOsd();
-                    break;
-
-                case Windows.System.VirtualKey.Right:
+                // Keep D-pad/arrow keys available to Xbox XYFocus so the user can
+                // navigate between transport, timeline, audio, and subtitle controls.
                 case Windows.System.VirtualKey.L:
                     SeekBy(TimeSpan.FromSeconds(10));
                     e.Handled = true;
@@ -405,12 +539,6 @@ namespace StreamioX.App.Views
 
                 case Windows.System.VirtualKey.J:
                     SeekBy(TimeSpan.FromSeconds(-10));
-                    e.Handled = true;
-                    ShowOsd();
-                    break;
-
-                case Windows.System.VirtualKey.K:
-                    PlayPause_Click(this, new RoutedEventArgs());
                     e.Handled = true;
                     ShowOsd();
                     break;
@@ -497,8 +625,9 @@ namespace StreamioX.App.Views
             }
         }
 
-        private void BackButton_Click(object sender, RoutedEventArgs e)
+        private async void BackButton_Click(object sender, RoutedEventArgs e)
         {
+            await SaveProgressAsync();
             _playbackTimer?.Stop();
             _osdTimer?.Stop();
             _mediaPlayer.Pause();
@@ -512,6 +641,7 @@ namespace StreamioX.App.Views
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            _ = SaveProgressAsync();
             _playbackTimer?.Stop();
             _osdTimer?.Stop();
             _mediaPlayer.Pause();

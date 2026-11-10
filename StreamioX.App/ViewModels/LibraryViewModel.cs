@@ -32,7 +32,10 @@ namespace StreamioX.App.ViewModels
             {
                 Entries.Clear();
                 foreach (var entry in await _library.GetEntriesAsync())
-                    Entries.Add(entry);
+                {
+                    if (entry.IsSaved)
+                        Entries.Add(entry);
+                }
                 Status = Entries.Count == 0 ? "Your library is empty. Save movies and series from their details pages." : $"{Entries.Count} saved title(s)";
                 OnPropertyChanged(nameof(HasEntries));
             }
