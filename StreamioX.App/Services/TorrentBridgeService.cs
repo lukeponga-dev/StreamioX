@@ -81,9 +81,15 @@ namespace StreamioX.App.Services
 
             var trackerCount = includedTrackers.Count;
             builder.Query = "magnet=" + Uri.EscapeDataString(magnet.ToString());
+            var resolvedUrl = builder.Uri.AbsoluteUri;
+            var cacheKey = "torrent-url:" + _port.Value + ":" + infoHash + ":" +
+                fileIndex + ":" + magnet.ToString();
             PlaybackDiagnostics.Write(
                 $"[Torrent] Prepared local stream route for hash {infoHash[..8]}…; file index {fileIndex}; trackers {trackerCount}; preserved original magnet: {originalMagnet != null}.");
-            return builder.Uri.AbsoluteUri;
+            return await MemoryTtlCache.GetOrCreateAsync(
+                cacheKey,
+                TimeSpan.FromSeconds(30),
+                () => Task.FromResult(resolvedUrl)).ConfigureAwait(false);
         }
 
         private static string? NormalizeInfoHash(string? value)
@@ -227,6 +233,7 @@ namespace StreamioX.App.Services
 
                 var result = await Task.Run(NativeBridge.Stop).ConfigureAwait(false);
                 _port = null;
+                MemoryTtlCache.RemoveByPrefix("torrent-url:");
 
                 if (result != 0)
                     throw new InvalidOperationException(NativeBridge.ReadLastError());

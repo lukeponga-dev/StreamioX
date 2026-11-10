@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using StreamioX.App.Models;
@@ -8,6 +7,7 @@ namespace StreamioX.App.Services
 {
     public sealed class MetadataService : IMetadataService
     {
+        private static readonly TimeSpan MetadataTtl = TimeSpan.FromMinutes(2);
         private readonly StremioClient _client;
         private readonly IAddonService _addons;
 
@@ -29,7 +29,12 @@ namespace StreamioX.App.Services
                 try
                 {
                     var url = $"{addon.BaseUrl.TrimEnd('/')}/meta/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(id)}.json";
-                    var response = await _client.GetFromJsonAsync<MetaResponse>(url, cancellationToken).ConfigureAwait(false);
+                    var response = await MemoryTtlCache.GetOrCreateAsync(
+                        "addon-meta:" + url,
+                        MetadataTtl,
+                        async () => await _client.GetFromJsonAsync<MetaResponse>(url, cancellationToken).ConfigureAwait(false))
+                        .ConfigureAwait(false);
+
                     if (response?.Meta != null)
                         return response.Meta;
                 }
@@ -39,6 +44,7 @@ namespace StreamioX.App.Services
                     // A metadata provider can be offline or not know this ID. Try the next compatible provider.
                 }
             }
+
             return null;
         }
     }

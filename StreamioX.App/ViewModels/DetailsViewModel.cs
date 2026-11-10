@@ -124,11 +124,17 @@ namespace StreamioX.App.ViewModels
                 if (string.Equals(SelectedMovie?.Type, "series", StringComparison.OrdinalIgnoreCase)
                     && Episodes.Count > 0)
                 {
-                    // Series streams are requested by video/episode ID, not the series ID.
+                    // Resolve the first episode's add-on responses while the user
+                    // is reading the details page. Selecting it later is a cache hit.
+                    var firstEpisodeId = Episodes.FirstOrDefault()?.Id;
+                    if (!string.IsNullOrWhiteSpace(firstEpisodeId))
+                        _ = PrefetchEpisodeStreamsAsync(firstEpisodeId, token);
                     return;
                 }
 
-                await LoadStreamsAsync(SelectedMovie?.Id ?? movie.Id ?? string.Empty, token).ConfigureAwait(true);
+                // Keep the details page responsive while stream providers resolve.
+                // The stream rail fills in as soon as the background request completes.
+                _ = LoadStreamsAsync(SelectedMovie?.Id ?? movie.Id ?? string.Empty, token);
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { ErrorMessage = $"Unable to load title details: {ex.Message}"; }
@@ -229,12 +235,64 @@ namespace StreamioX.App.ViewModels
                 foreach (var stream in fetched)
                     Streams.Add(stream);
 
+                // Pre-resolve local torrent bridge URLs without starting playback.
+                // PlayStreamAsync receives the same StreamSource and reuses the URL.
+                _ = PreResolveTorrentUrlsAsync(fetched, token);
+
                 if (Streams.Count == 0)
                     ErrorMessage = "No streams found for this selection. Install a stream add-on that supports this title.";
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { ErrorMessage = $"Failed to load streams: {ex.Message}"; }
             finally { IsLoadingStreams = false; }
+        }
+
+        private async Task PrefetchEpisodeStreamsAsync(string episodeId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var type = SelectedMovie?.Type ?? "series";
+                var streams = await _streamService.GetFromInstalledAddonsAsync(
+                    type, episodeId, cancellationToken).ConfigureAwait(false);
+                await PreResolveTorrentUrlsAsync(streams, cancellationToken).ConfigureAwait(false);
+                PlaybackDiagnostics.Write(
+                    $"[Prefetch] Cached {streams.Count} stream result(s) for episode {episodeId}.");
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.Write($"[Prefetch] Episode stream prefetch failed: {ex.Message}");
+            }
+        }
+
+        private async Task PreResolveTorrentUrlsAsync(
+            System.Collections.Generic.IReadOnlyList<StreamSource> streams,
+            CancellationToken cancellationToken)
+        {
+            foreach (var stream in streams)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return;
+
+                var isDirectUrl = Uri.TryCreate(stream.Url, UriKind.Absolute, out var uri)
+                    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+                var isMagnet = Uri.TryCreate(stream.Url, UriKind.Absolute, out var magnet)
+                    && string.Equals(magnet.Scheme, "magnet", StringComparison.OrdinalIgnoreCase);
+                if (isDirectUrl || (string.IsNullOrWhiteSpace(stream.InfoHash) && !isMagnet))
+                    continue;
+
+                try
+                {
+                    await _torrentBridgeService.GetStreamUrlAsync(stream, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { return; }
+                catch (Exception ex)
+                {
+                    // A single unsupported torrent source must not block the remaining providers.
+                    PlaybackDiagnostics.Write($"[Prefetch] Torrent URL pre-resolution skipped: {ex.Message}");
+                }
+            }
         }
 
         private void NotifyDetailsProperties()

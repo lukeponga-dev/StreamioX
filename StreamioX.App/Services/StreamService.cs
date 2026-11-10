@@ -8,6 +8,7 @@ namespace StreamioX.App.Services
 {
     public sealed class StreamService : IStreamService
     {
+        private static readonly TimeSpan StreamResponseTtl = TimeSpan.FromSeconds(45);
         private readonly StremioClient _stremioClient;
         private readonly IAddonService _addonService;
 
@@ -27,12 +28,18 @@ namespace StreamioX.App.Services
                 return Array.Empty<StreamSource>();
 
             string url = $"{addonBaseUrl.TrimEnd('/')}/stream/{type}/{id}.json";
+            var cacheKey = "addon-stream:" + url;
 
-            var response = await _stremioClient
-                .GetFromJsonAsync<StreamResponse>(url, cancellationToken)
-                .ConfigureAwait(false);
-
-            return response?.Streams ?? Array.Empty<StreamSource>();
+            return await MemoryTtlCache.GetOrCreateAsync(
+                cacheKey,
+                StreamResponseTtl,
+                async () =>
+                {
+                    var response = await _stremioClient
+                        .GetFromJsonAsync<StreamResponse>(url, cancellationToken)
+                        .ConfigureAwait(false);
+                    return (IReadOnlyList<StreamSource>)(response?.Streams ?? Array.Empty<StreamSource>());
+                }).ConfigureAwait(false);
         }
 
         public async Task<IReadOnlyList<StreamSource>> GetFromInstalledAddonsAsync(
@@ -47,15 +54,17 @@ namespace StreamioX.App.Services
 
             foreach (var addon in providers)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
                     var streams = await GetStreamsAsync(addon.BaseUrl, type, id, cancellationToken)
                         .ConfigureAwait(false);
                     results.AddRange(streams);
                 }
+                catch (OperationCanceledException) { throw; }
                 catch
                 {
-                    // Skip failed provider
+                    // Skip a failed provider. Failed requests are not added to the cache.
                 }
             }
 
