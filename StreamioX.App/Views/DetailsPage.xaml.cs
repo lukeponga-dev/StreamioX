@@ -21,6 +21,7 @@ namespace StreamioX.App.Views
         {
             InitializeComponent();
             FocusHelper.AttachXboxFocus(LibraryButton);
+            FocusHelper.AttachXboxFocus(ResumeButton);
             ViewModel = AppServices.GetRequiredService<DetailsViewModel>();
             DataContext = ViewModel;
             ViewModel.Episodes.CollectionChanged += ContentRows_CollectionChanged;
@@ -95,6 +96,13 @@ namespace StreamioX.App.Views
                 if (ReferenceEquals(image, PosterImage))
                     PosterFallback.Visibility = Visibility.Visible;
             }
+        }
+
+        private async void ResumeButton_Click(object sender, Windows.UI.Xaml.RoutedEventArgs e)
+        {
+            await ViewModel.ResumeWatchingCommand.ExecuteAsync(null);
+            if (StreamsRow.Children.Count > 0 && StreamsRow.Children[0] is Control firstStream)
+                firstStream.Focus(Windows.UI.Xaml.FocusState.Programmatic);
         }
 
         private void EpisodeButton_Click(object sender, Windows.UI.Xaml.RoutedEventArgs e)

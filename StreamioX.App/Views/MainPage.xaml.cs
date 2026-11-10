@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using StreamioX.App.Navigation;
 using StreamioX.App.ViewModels;
 using StreamioX.App.Services;
+using StreamioX.App.Layout;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -22,6 +23,7 @@ namespace StreamioX.App.Views
             _authService = AppServices.GetRequiredService<IAuthService>();
             _navigationService.Initialize(ContentFrame);
             ContentFrame.NavigationFailed += ContentFrame_NavigationFailed;
+            ContentFrame.Navigated += ContentFrame_Navigated;
             ViewModel = AppServices.GetRequiredService<MainViewModel>();
             DataContext = ViewModel;
             Loaded += MainPage_Loaded;
@@ -35,8 +37,24 @@ namespace StreamioX.App.Views
             _authService.SessionChanged += AuthService_SessionChanged;
             NavShell.SelectedItem = HomeNavItem;
             if (ContentFrame.Content == null) ViewModel.NavigateToHomeCommand.Execute(null);
+            UpdatePlaybackChrome(ContentFrame.Content is PlayerPage);
             _ = RefreshProfileAsync();
-            HomeNavItem.Focus(FocusState.Programmatic);
+            if (ContentFrame.Content is not PlayerPage)
+                HomeNavItem.Focus(FocusState.Programmatic);
+        }
+
+        private void ContentFrame_Navigated(object sender, Windows.UI.Xaml.Navigation.NavigationEventArgs e)
+        {
+            // PlayerPage is hosted in the same Frame, but takes over the entire
+            // app viewport: hide navigation/profile chrome and remove safe-area padding.
+            UpdatePlaybackChrome(e.Content is PlayerPage);
+        }
+
+        private void UpdatePlaybackChrome(bool isPlayingPage)
+        {
+            NavShell.Visibility = isPlayingPage ? Visibility.Collapsed : Visibility.Visible;
+            ProfileButton.Visibility = isPlayingPage ? Visibility.Collapsed : Visibility.Visible;
+            RootLayout.Padding = isPlayingPage ? new Thickness(0) : XboxConstants.SafeArea;
         }
 
         private void ContentFrame_NavigationFailed(object sender, Windows.UI.Xaml.Navigation.NavigationFailedEventArgs e)
@@ -68,6 +86,7 @@ namespace StreamioX.App.Views
         {
             SystemNavigationManager.GetForCurrentView().BackRequested -= System_BackRequested;
             _authService.SessionChanged -= AuthService_SessionChanged;
+            ContentFrame.Navigated -= ContentFrame_Navigated;
         }
 
         private async Task RefreshProfileAsync()

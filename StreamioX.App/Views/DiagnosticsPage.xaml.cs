@@ -1,6 +1,8 @@
 using StreamioX.App.Models;
 using StreamioX.App.Services;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -57,6 +59,49 @@ namespace StreamioX.App.Views
             catch (System.Exception ex)
             {
                 PlaybackDiagnostics.Write($"[TorrentTest] Failed before PlayerPage: 0x{ex.HResult:X8} {ex}");
+            }
+        }
+
+        private async void PlayAuthenticatedAddon_Click(object sender, RoutedEventArgs e)
+        {
+            const string contentId = "tt0133093"; // The Matrix (1999)
+            try
+            {
+                PlaybackDiagnostics.Write("[AddonPlaybackTest] Requesting a real movie stream from the installed Jackettio add-on.");
+                var addons = AppServices.GetRequiredService<IAddonService>();
+                var streamService = AppServices.GetRequiredService<IStreamService>();
+                await addons.InitializeAsync(CancellationToken.None);
+
+                var addon = addons.GetStreamProviders("movie", contentId)
+                    .FirstOrDefault(item => item.Name != null
+                        && item.Name.IndexOf("Jackettio", System.StringComparison.OrdinalIgnoreCase) >= 0);
+                if (addon == null)
+                {
+                    PlaybackDiagnostics.Write("[AddonPlaybackTest] Jackettio is not installed or does not support this movie ID.");
+                    return;
+                }
+
+                var streams = await streamService.GetStreamsAsync(addon.BaseUrl, "movie", contentId, CancellationToken.None);
+                PlaybackDiagnostics.Write($"[AddonPlaybackTest] Add-on '{addon.Name}' returned {streams.Count} stream(s).");
+                var selected = streams.FirstOrDefault(item => Uri.TryCreate(item.Url, UriKind.Absolute, out var uri)
+                    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps));
+                if (selected?.Url == null)
+                {
+                    PlaybackDiagnostics.Write("[AddonPlaybackTest] No direct HTTP(S) stream URL was returned.");
+                    return;
+                }
+
+                var streamUri = new Uri(selected.Url);
+                var headerCount = selected.BehaviorHints?.ProxyHeaders?.Request?.Count ?? 0;
+                PlaybackDiagnostics.Write($"[AddonPlaybackTest] Selected stream host '{streamUri.Host}'; provider request header count: {headerCount}. Navigating to PlayerPage.");
+                Frame.Navigate(typeof(PlayerPage), new PlaybackRequest(
+                    selected.Url,
+                    "The Matrix — authenticated Jackettio add-on test",
+                    requestHeaders: selected.BehaviorHints?.ProxyHeaders?.Request));
+            }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.Write($"[AddonPlaybackTest] Failed: 0x{ex.HResult:X8} {ex.GetType().Name}: {ex.Message}");
             }
         }
     }

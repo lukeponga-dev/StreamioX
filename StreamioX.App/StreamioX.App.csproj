@@ -14,9 +14,21 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableMsixTooling>true</EnableMsixTooling>
     <BuildTorrentBridge Condition="'$(BuildTorrentBridge)' == ''">true</BuildTorrentBridge>
+    <GenerateAppInstallerFile>True</GenerateAppInstallerFile>
+    <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
+    <PackageCertificateThumbprint>3DC57E047D2C4567F3107708EF027AF166DFB3C0</PackageCertificateThumbprint>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+    <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+    <GenerateTestArtifacts>False</GenerateTestArtifacts>
+    <AppxBundle>Always</AppxBundle>
+    <AppxBundlePlatforms>x64</AppxBundlePlatforms>
+    <AppInstallerUri>C:\Users\lukeg\source\repos\streamio-xbox\StreamioX\StreamioX.App\bin</AppInstallerUri>
+    <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
   </PropertyGroup>
   <ItemGroup>
     <Folder Include="Converters\" />
+    <!-- Explicit root-level manifest assets required by Store/MSIX validation. -->
+    <Content Include="Assets\StoreLogo.png;Assets\Square44x44Logo.png;Assets\Square150x150Logo.png;Assets\Wide310x150Logo.png;Assets\SplashScreen.png;Assets\SmallTile.png;Assets\LargeTile.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup Condition="'$(Platform)' == 'x64'">
     <!-- Include the native bridge even on a clean checkout; BuildTorrentBridge creates it before content is copied. -->

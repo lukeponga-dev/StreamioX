@@ -31,7 +31,7 @@ namespace StreamioX.App.Services
         public async Task<bool> IsSavedAsync(string type, string id)
         {
             var entries = await GetEntriesAsync().ConfigureAwait(false);
-            return entries.Any(x => x.InLibrary && Matches(x, type, id));
+            return entries.Any(x => x.IsSaved && Matches(x, type, id));
         }
 
         public async Task SaveAsync(Movie movie)
@@ -47,7 +47,7 @@ namespace StreamioX.App.Services
                 else
                 {
                     existing.Movie = movie;
-                    existing.InLibrary = true;
+                    existing.IsSaved = true;
                 }
                 await SaveFileAsync(entries).ConfigureAwait(false);
             }
@@ -60,31 +60,41 @@ namespace StreamioX.App.Services
             try
             {
                 var entries = await LoadAsync().ConfigureAwait(false);
-                // Keep watch progress so removing a title from the library does not
-                // also drop it from Continue Watching.
-                foreach (var entry in entries.Where(x => Matches(x, type, id)))
-                    entry.InLibrary = false;
-                entries.RemoveAll(x => !x.InLibrary && x.PositionSeconds <= 0);
+                entries.RemoveAll(x => Matches(x, type, id));
                 await SaveFileAsync(entries).ConfigureAwait(false);
             }
             finally { _gate.Release(); }
         }
 
-        public async Task UpdateProgressAsync(string type, string id, double positionSeconds, double durationSeconds, string? episodeId = null, Movie? movie = null)
+        public async Task UpdateProgressAsync(string type, string id, double positionSeconds, double durationSeconds,
+            string? episodeId = null, Movie? movie = null)
         {
+            if (string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(id))
+                return;
+
             await _gate.WaitAsync().ConfigureAwait(false);
             try
             {
                 var entries = await LoadAsync().ConfigureAwait(false);
                 var entry = entries.FirstOrDefault(x => Matches(x, type, id));
-                if (entry == null && movie != null &&
-                    string.Equals(movie.Id, id, StringComparison.OrdinalIgnoreCase))
+
+                // Playback creates a Continue Watching entry even when the title
+                // has not separately been added to the user's saved library.
+                if (entry == null && movie != null && !string.IsNullOrWhiteSpace(movie.Id))
                 {
-                    entry = new LibraryEntry { Movie = movie, AddedUtc = DateTimeOffset.UtcNow, InLibrary = false };
+                    entry = new LibraryEntry
+                    {
+                        Movie = movie,
+                        IsSaved = false,
+                        AddedUtc = DateTimeOffset.UtcNow
+                    };
                     entries.Add(entry);
                 }
+
                 if (entry != null)
                 {
+                    if (movie != null)
+                        entry.Movie = movie;
                     entry.PositionSeconds = Math.Max(0, positionSeconds);
                     entry.DurationSeconds = Math.Max(0, durationSeconds);
                     entry.LastEpisodeId = episodeId;

@@ -5,17 +5,25 @@
     xmlns:layout="using:StreamioX.App.Layout"
     XYFocusKeyboardNavigation="Enabled"
     Background="#05090C">
-    <Grid Padding="{x:Bind layout:XboxConstants.SafeArea}">
+    <Grid x:Name="RootLayout" Padding="{x:Bind layout:XboxConstants.SafeArea}">
         <Grid.Background>
             <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Color="#05090C" Offset="0"/>
                 <GradientStop Color="#07130F" Offset="1"/>
             </LinearGradientBrush>
         </Grid.Background>
-        <NavigationView x:Name="NavShell" PaneDisplayMode="Top" PaneTitle="STREAMIOX"
-                        IsSettingsVisible="False" IsBackButtonVisible="Collapsed"
-                        AlwaysShowHeader="False" Background="#05090C"
-                        XYFocusKeyboardNavigation="Enabled" ItemInvoked="NavShell_ItemInvoked">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Navigation chrome occupies its own row so playback can hide it
+             without hiding the Frame that hosts PlayerPage. -->
+        <NavigationView x:Name="NavShell" Grid.Row="0" Height="64" VerticalAlignment="Top" PaneDisplayMode="Top"
+                        PaneTitle="STREAMIOX" IsSettingsVisible="False"
+                        IsBackButtonVisible="Collapsed" AlwaysShowHeader="False"
+                        Background="#05060A" XYFocusKeyboardNavigation="Enabled"
+                        ItemInvoked="NavShell_ItemInvoked">
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="HomeNavItem" Content="Home" Tag="Home">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;"/></NavigationViewItem.Icon>
@@ -33,10 +41,12 @@
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE718;"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
-            <Frame x:Name="ContentFrame" XYFocusKeyboardNavigation="Enabled"/>
         </NavigationView>
 
-        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,7,14,0"
+        <Frame x:Name="ContentFrame" Grid.Row="1" XYFocusKeyboardNavigation="Enabled"/>
+
+        <Button x:Name="ProfileButton" Grid.Row="0"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,7,14,0"
                 Padding="10,5" Background="#101A20" BorderBrush="#244238" BorderThickness="1"
                 XYFocusKeyboardNavigation="Enabled">
             <StackPanel Orientation="Horizontal" Spacing="9">
