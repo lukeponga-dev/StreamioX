@@ -165,14 +165,42 @@ namespace StreamioX.App.Views
         private void SeekBy(TimeSpan offset)
         {
             var session = _mediaPlayer.PlaybackSession;
+            if (_mediaPlayer.Source == null || !session.CanSeek)
+            {
+                ViewModel.SetStreamingStatus("Seeking is not available for this stream.");
+                return;
+            }
+
             var target = session.Position + offset;
-            if (target < TimeSpan.Zero) target = TimeSpan.Zero;
-            if (session.NaturalDuration > TimeSpan.Zero && target > session.NaturalDuration) target = session.NaturalDuration;
-            session.Position = target;
+            if (target < TimeSpan.Zero)
+                target = TimeSpan.Zero;
+            if (session.NaturalDuration > TimeSpan.Zero && target > session.NaturalDuration)
+                target = session.NaturalDuration;
+
+            try
+            {
+                session.Position = target;
+                ViewModel.UpdatePlaybackTime(session.Position, session.NaturalDuration);
+                ViewModel.SetStreamingStatus(offset < TimeSpan.Zero
+                    ? "Rewound 10 seconds"
+                    : "Fast-forwarded 10 seconds");
+            }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.Write($"[PlayerPage] Seek failed (HRESULT 0x{ex.HResult:X8}): {ex.GetType().Name}");
+                ViewModel.SetStreamingStatus("Unable to seek this stream.");
+            }
         }
 
         private void PlayPause_Click(object sender, RoutedEventArgs e)
         {
+            if (_mediaPlayer.Source == null)
+            {
+                ViewModel.SetStreamingStatus("Choose a stream before starting playback.");
+                ShowOsd();
+                return;
+            }
+
             if (_mediaPlayer.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
                 _mediaPlayer.Pause();
             else
@@ -222,14 +250,27 @@ namespace StreamioX.App.Views
             if (_updatingProgressSlider || _mediaPlayer == null)
                 return;
 
-            var duration = _mediaPlayer.PlaybackSession.NaturalDuration;
-            if (duration <= TimeSpan.Zero)
+            var session = _mediaPlayer.PlaybackSession;
+            var duration = session.NaturalDuration;
+            if (_mediaPlayer.Source == null || !session.CanSeek || duration <= TimeSpan.Zero)
+            {
+                ViewModel.SetStreamingStatus("Seeking is not available for this stream.");
                 return;
+            }
 
             var targetSeconds = duration.TotalSeconds * (e.NewValue / 100.0);
-            _mediaPlayer.PlaybackSession.Position = TimeSpan.FromSeconds(
-                Math.Max(0, Math.Min(targetSeconds, duration.TotalSeconds)));
-            ShowOsd();
+            try
+            {
+                session.Position = TimeSpan.FromSeconds(
+                    Math.Max(0, Math.Min(targetSeconds, duration.TotalSeconds)));
+                ViewModel.UpdatePlaybackTime(session.Position, duration);
+                ShowOsd();
+            }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.Write($"[PlayerPage] Progress seek failed (HRESULT 0x{ex.HResult:X8}): {ex.GetType().Name}");
+                ViewModel.SetStreamingStatus("Unable to seek this stream.");
+            }
         }
 
         private void ShowLoadingOverlay(string status)
@@ -356,7 +397,20 @@ namespace StreamioX.App.Views
                     break;
 
                 case Windows.System.VirtualKey.Right:
+                case Windows.System.VirtualKey.L:
                     SeekBy(TimeSpan.FromSeconds(10));
+                    e.Handled = true;
+                    ShowOsd();
+                    break;
+
+                case Windows.System.VirtualKey.J:
+                    SeekBy(TimeSpan.FromSeconds(-10));
+                    e.Handled = true;
+                    ShowOsd();
+                    break;
+
+                case Windows.System.VirtualKey.K:
+                    PlayPause_Click(this, new RoutedEventArgs());
                     e.Handled = true;
                     ShowOsd();
                     break;

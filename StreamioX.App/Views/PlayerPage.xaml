@@ -64,14 +64,15 @@
                 <!-- Main Controls -->
                 <StackPanel Orientation="Horizontal" Spacing="24" HorizontalAlignment="Center">
                     <!-- Skip Back Button -->
-                    <Button x:Name="SkipBackButton" Width="56" Height="56" Padding="0"
+                    <Button x:Name="SkipBackButton" Width="76" Height="64" Padding="4"
                             Background="#1A2A35" Foreground="{StaticResource TextPrimaryBrush}"
-                            Click="SkipBack_Click" CornerRadius="28"
+                            Click="SkipBack_Click" CornerRadius="8"
                             Style="{StaticResource XboxFocusCardStyle}"
-                            ToolTipService.ToolTip="Skip Back 10s">
-                        <StackPanel Spacing="0" HorizontalAlignment="Center">
+                            ToolTipService.ToolTip="Rewind 10 seconds (Left / J)"
+                            AutomationProperties.Name="Rewind 10 seconds">
+                        <StackPanel Spacing="2" HorizontalAlignment="Center">
                             <FontIcon Glyph="&#xE71E;" FontSize="24"/>
-                            <TextBlock Text="10s" FontSize="10" TextAlignment="Center"/>
+                            <TextBlock Text="REWIND 10s" FontSize="10" FontWeight="SemiBold" TextAlignment="Center"/>
                         </StackPanel>
                     </Button>
 
@@ -80,19 +81,21 @@
                             Background="{StaticResource AccentBrush}" Foreground="White"
                             Click="PlayPause_Click" CornerRadius="36"
                             Style="{StaticResource XboxFocusCardStyle}"
-                            ToolTipService.ToolTip="Play / Pause (A / Space)">
+                            ToolTipService.ToolTip="Play / Pause (A / Space / K)"
+                            AutomationProperties.Name="Play or pause">
                         <FontIcon x:Name="PlayPauseIcon" Glyph="&#xE768;" FontSize="32"/>
                     </Button>
 
                     <!-- Skip Forward Button -->
-                    <Button x:Name="SkipForwardButton" Width="56" Height="56" Padding="0"
+                    <Button x:Name="SkipForwardButton" Width="76" Height="64" Padding="4"
                             Background="#1A2A35" Foreground="{StaticResource TextPrimaryBrush}"
-                            Click="SkipForward_Click" CornerRadius="28"
+                            Click="SkipForward_Click" CornerRadius="8"
                             Style="{StaticResource XboxFocusCardStyle}"
-                            ToolTipService.ToolTip="Skip Forward 10s">
-                        <StackPanel Spacing="0" HorizontalAlignment="Center">
+                            ToolTipService.ToolTip="Fast-forward 10 seconds (Right / L)"
+                            AutomationProperties.Name="Fast-forward 10 seconds">
+                        <StackPanel Spacing="2" HorizontalAlignment="Center">
                             <FontIcon Glyph="&#xE71F;" FontSize="24"/>
-                            <TextBlock Text="10s" FontSize="10" TextAlignment="Center"/>
+                            <TextBlock Text="FORWARD 10s" FontSize="10" FontWeight="SemiBold" TextAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>

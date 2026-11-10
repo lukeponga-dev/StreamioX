@@ -1,6 +1,7 @@
 using StreamioX.App.Services;
 using StreamioX.App.Views;
 using System;
+using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.UI.Xaml;
@@ -17,6 +18,7 @@ namespace StreamioX.App
 
             this.RequiresPointerMode = ApplicationRequiresPointerMode.WhenRequested;
             this.Suspending += OnSuspending;
+            this.Resuming += OnResuming;
 
             AppServices.Configure();
         }
@@ -48,6 +50,33 @@ namespace StreamioX.App
             }
 
             Window.Current.Activate();
+
+            // Start the embedded torrent HTTP server in the background so it is
+            // ready before the user selects a torrent stream.
+            _ = StartTorrentServerAsync("app launch");
+        }
+
+        private async Task StartTorrentServerAsync(string reason)
+        {
+            try
+            {
+                var address = await AppServices.GetRequiredService<ITorrentBridgeService>()
+                    .StartServerAsync();
+                PlaybackDiagnostics.Write($"[Startup] Torrent HTTP server ready at {address} ({reason}).");
+            }
+            catch (Exception ex)
+            {
+                // Keep the app usable if the native bridge is unavailable. A later
+                // playback request can retry startup and Settings can show diagnostics.
+                PlaybackDiagnostics.Write(
+                    $"[Startup] Torrent HTTP server failed to start ({reason}): {ex.GetType().Name}, HRESULT 0x{ex.HResult:X8}: {ex.Message}");
+            }
+        }
+
+        private void OnResuming(object sender, object e)
+        {
+            // The server is stopped during suspension, so bring it back on resume.
+            _ = StartTorrentServerAsync("app resume");
         }
 
         private void OnNavigationFailed(object sender, NavigationFailedEventArgs e)

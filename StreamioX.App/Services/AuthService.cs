@@ -453,8 +453,22 @@ namespace StreamioX.App.Services
             try
             {
                 var vault = new PasswordVault();
-                RemoveVaultCredentials(vault);
-                vault.Add(new PasswordCredential(VaultResource, VaultUserName, AuthKey));
+                var credential = new PasswordCredential(VaultResource, VaultUserName, AuthKey);
+
+                try
+                {
+                    // Avoid enumerating an empty vault during first login:
+                    // FindAllByResource throws 0x80070490 when no entry exists.
+                    vault.Add(credential);
+                }
+                catch
+                {
+                    // A previous login may already have stored this resource/user.
+                    // Replace stale credentials, then retry once.
+                    RemoveVaultCredentials(vault);
+                    vault.Add(credential);
+                }
+
                 ApplicationData.Current.LocalSettings.Values.Remove(AuthKeySetting);
                 return true;
             }
