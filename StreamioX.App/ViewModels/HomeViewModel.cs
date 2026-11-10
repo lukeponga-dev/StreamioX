@@ -60,12 +60,13 @@ namespace StreamioX.App.ViewModels
                     .OrderByDescending(x => x.LastPlayedUtc ?? x.AddedUtc).Take(8))
                     ContinueWatching.Add(entry);
 
-                PopularMovies.Clear();
-                foreach (var item in moviesTask.Result.Where(x => !string.IsNullOrWhiteSpace(x.Id)).Take(20))
-                {
+                var movies = moviesTask.Result.Where(x => !string.IsNullOrWhiteSpace(x.Id)).ToList();
+                foreach (var item in movies)
                     item.Type ??= "movie";
+
+                PopularMovies.Clear();
+                foreach (var item in movies.Take(20))
                     PopularMovies.Add(item);
-                }
 
                 PopularSeries.Clear();
                 foreach (var item in seriesTask.Result.Where(x => !string.IsNullOrWhiteSpace(x.Id)).Take(20))
@@ -78,11 +79,12 @@ namespace StreamioX.App.ViewModels
                     !string.IsNullOrWhiteSpace(x.BackgroundUrl) || !string.IsNullOrWhiteSpace(x.PosterUrl))
                     ?? PopularMovies.FirstOrDefault();
 
+                // Rows below Popular continue through the catalog instead of repeating it.
                 Recommended.Clear();
-                foreach (var item in PopularMovies.Skip(5).Take(15)) Recommended.Add(item);
+                foreach (var item in movies.Skip(20).Take(15)) Recommended.Add(item);
 
                 MoreMovies.Clear();
-                foreach (var item in PopularMovies.Skip(20).Take(15)) MoreMovies.Add(item);
+                foreach (var item in movies.Skip(35).Take(15)) MoreMovies.Add(item);
 
                 HasCatalogContent = PopularMovies.Count > 0 || PopularSeries.Count > 0;
                 StatusMessage = $"{PopularMovies.Count} movies · {PopularSeries.Count} series · {ContinueWatching.Count} in progress";

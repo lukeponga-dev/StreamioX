@@ -18,6 +18,8 @@ namespace StreamioX.App.Services
     {
         private const string AuthKeySetting = "StremioAuthKey";
         private const string UserSetting = "StremioUserJson";
+        private const string PendingAddonPushSetting = "StremioAddonCollectionPendingPush";
+        private const string LastSyncedAddonUrlsSetting = "StremioLastSyncedAddonUrls";
         private const string VaultResource = "StreamioX.Stremio";
         private const string VaultUserName = "account-auth-key";
         private const string ApiBase = "https://api.strem.io/api/";
@@ -263,6 +265,8 @@ namespace StreamioX.App.Services
             User = null;
             LastAddonSyncMessage = "Signed out of Stremio.";
             ClearPersist();
+            HasPendingAddonPush = false;
+            ApplicationData.Current.LocalSettings.Values.Remove(LastSyncedAddonUrlsSetting);
             SessionChanged?.Invoke(this, EventArgs.Empty);
         }
 
@@ -298,6 +302,44 @@ namespace StreamioX.App.Services
                     throw new InvalidDataException("Stremio returned an invalid add-on collection.");
 
                 var result = new AddonAccountSyncResult();
+
+                // A local removal that has not reached the account yet must win over
+                // the cloud copy; otherwise the pull below would reinstall it.
+                if (HasPendingAddonPush)
+                {
+                    result.Pushed = await PushLocalCollectionAsync(remote, cancellationToken).ConfigureAwait(false);
+                    result.Message = $"Stremio account updated with local add-on changes: {result.Pushed} add-ons saved to your account.";
+                    LastAddonSyncMessage = result.Message;
+                    return result;
+                }
+
+                // Add-ons that were in the account at the last sync but are gone now were
+                // removed on another device. Remove them here instead of pushing them back.
+                var remoteUrls = new HashSet<string>(
+                    remote.Addons
+                        .Select(item => item.TransportUrl?.Trim())
+                        .Where(url => !string.IsNullOrWhiteSpace(url))
+                        .Select(url => NormalizeTransportUrl(url!)),
+                    StringComparer.OrdinalIgnoreCase);
+                var lastSyncedUrls = LoadLastSyncedAddonUrls();
+                foreach (var local in _addonService.InstalledAddons)
+                {
+                    if (local.IsOfficial ||
+                        !lastSyncedUrls.Contains(local.ManifestUrl) ||
+                        remoteUrls.Contains(local.ManifestUrl))
+                        continue;
+
+                    try
+                    {
+                        await _addonService.UninstallAsync(local.Id).ConfigureAwait(false);
+                        result.Removed++;
+                    }
+                    catch
+                    {
+                        result.Failed++;
+                    }
+                }
+
                 foreach (var descriptor in remote.Addons)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -336,33 +378,8 @@ namespace StreamioX.App.Services
                     return result;
                 }
 
-                var localDescriptors = _addonService.InstalledAddons
-                    .Select(ToDescriptor)
-                    .Where(item => item != null)
-                    .Cast<StremioAddonDescriptor>()
-                    .ToList();
-
-                // Keep trusted/protected flags for descriptors already present in the account.
-                var remoteByUrl = remote.Addons
-                    .Where(item => !string.IsNullOrWhiteSpace(item.TransportUrl))
-                    .GroupBy(item => item.TransportUrl!, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-                foreach (var localDescriptor in localDescriptors)
-                {
-                    if (localDescriptor.TransportUrl != null &&
-                        remoteByUrl.TryGetValue(localDescriptor.TransportUrl, out var existingRemote) &&
-                        existingRemote.Flags.HasValue)
-                    {
-                        localDescriptor.Flags = existingRemote.Flags.Value.Clone();
-                    }
-                }
-
-                await PostApiAsync<JsonElement>("addonCollectionSet",
-                    new StremioApiRequest { AuthKey = AuthKey, Addons = localDescriptors },
-                    cancellationToken).ConfigureAwait(false);
-
-                result.Pushed = localDescriptors.Count;
-                result.Message = $"Stremio account synchronized: {result.Pulled} downloaded, {result.Pushed} add-ons saved to your account.";
+                result.Pushed = await PushLocalCollectionAsync(remote, cancellationToken).ConfigureAwait(false);
+                result.Message = $"Stremio account synchronized: {result.Pulled} downloaded, {result.Removed} removed, {result.Pushed} add-ons saved to your account.";
                 LastAddonSyncMessage = result.Message;
                 return result;
             }
@@ -370,6 +387,103 @@ namespace StreamioX.App.Services
             {
                 _syncLock.Release();
             }
+        }
+
+        public async Task<bool> PushAddonCollectionAsync(CancellationToken cancellationToken = default)
+        {
+            // Remember the local change first so an offline push is retried by the
+            // next sync instead of being overwritten by the cloud collection.
+            HasPendingAddonPush = true;
+            if (!IsLoggedIn) return false;
+
+            await _syncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var remote = await PostApiAsync<StremioAddonCollectionResult>("addonCollectionGet",
+                    new StremioApiRequest
+                    {
+                        AuthKey = AuthKey,
+                        Update = true,
+                        AddFromURL = new List<string>()
+                    }, cancellationToken).ConfigureAwait(false);
+                if (remote?.Addons == null)
+                    throw new InvalidDataException("Stremio returned an invalid add-on collection.");
+
+                var pushed = await PushLocalCollectionAsync(remote, cancellationToken).ConfigureAwait(false);
+                LastAddonSyncMessage = $"Stremio account updated: {pushed} add-ons saved to your account.";
+                return true;
+            }
+            finally
+            {
+                _syncLock.Release();
+            }
+        }
+
+        private async Task<int> PushLocalCollectionAsync(StremioAddonCollectionResult remote, CancellationToken cancellationToken)
+        {
+            var localDescriptors = _addonService.InstalledAddons
+                .Select(ToDescriptor)
+                .Where(item => item != null)
+                .Cast<StremioAddonDescriptor>()
+                .ToList();
+
+            // Keep trusted/protected flags for descriptors already present in the account.
+            var remoteByUrl = remote.Addons!
+                .Where(item => !string.IsNullOrWhiteSpace(item.TransportUrl))
+                .GroupBy(item => item.TransportUrl!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            foreach (var localDescriptor in localDescriptors)
+            {
+                if (localDescriptor.TransportUrl != null &&
+                    remoteByUrl.TryGetValue(localDescriptor.TransportUrl, out var existingRemote) &&
+                    existingRemote.Flags.HasValue)
+                {
+                    localDescriptor.Flags = existingRemote.Flags.Value.Clone();
+                }
+            }
+
+            await PostApiAsync<JsonElement>("addonCollectionSet",
+                new StremioApiRequest { AuthKey = AuthKey, Addons = localDescriptors },
+                cancellationToken).ConfigureAwait(false);
+
+            SaveLastSyncedAddonUrls(localDescriptors
+                .Select(item => item.TransportUrl)
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Cast<string>());
+            HasPendingAddonPush = false;
+            return localDescriptors.Count;
+        }
+
+        private static bool HasPendingAddonPush
+        {
+            get => ApplicationData.Current.LocalSettings.Values.TryGetValue(PendingAddonPushSetting, out var value) &&
+                   value is bool pending && pending;
+            set
+            {
+                var settings = ApplicationData.Current.LocalSettings.Values;
+                if (value) settings[PendingAddonPushSetting] = true;
+                else settings.Remove(PendingAddonPushSetting);
+            }
+        }
+
+        private static string NormalizeTransportUrl(string url) =>
+            Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.AbsoluteUri : url;
+
+        private static HashSet<string> LoadLastSyncedAddonUrls()
+        {
+            var urls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (ApplicationData.Current.LocalSettings.Values.TryGetValue(LastSyncedAddonUrlsSetting, out var value) &&
+                value is string joined)
+            {
+                foreach (var url in joined.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    urls.Add(NormalizeTransportUrl(url));
+            }
+            return urls;
+        }
+
+        private static void SaveLastSyncedAddonUrls(IEnumerable<string> urls)
+        {
+            ApplicationData.Current.LocalSettings.Values[LastSyncedAddonUrlsSetting] = string.Join("\n", urls);
         }
 
         private async Task SyncAfterLoginAsync(CancellationToken cancellationToken)

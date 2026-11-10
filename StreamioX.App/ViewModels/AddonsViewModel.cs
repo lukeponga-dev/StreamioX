@@ -11,6 +11,7 @@ namespace StreamioX.App.ViewModels
     public partial class AddonsViewModel : ObservableObject
     {
         private readonly IAddonService _addonService;
+        private readonly IAuthService _authService;
 
         [ObservableProperty]
         public partial ObservableCollection<InstalledAddon> Addons { get; set; } = new();
@@ -24,8 +25,11 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty]
         public partial string? StatusMessage { get; set; }
 
-        public AddonsViewModel(IAddonService addonService) =>
+        public AddonsViewModel(IAddonService addonService, IAuthService authService)
+        {
             _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
+            _authService = authService ?? throw new ArgumentNullException(nameof(authService));
+        }
 
         [RelayCommand]
         public async Task LoadAsync()
@@ -94,8 +98,21 @@ namespace StreamioX.App.ViewModels
             try
             {
                 await _addonService.UninstallAsync(addon.Id);
-                StatusMessage = $"Removed: {addon.Name}";
                 RefreshList();
+                StatusMessage = $"Removed: {addon.Name}";
+
+                if (_authService.IsLoggedIn)
+                {
+                    try
+                    {
+                        await _authService.PushAddonCollectionAsync();
+                        StatusMessage = $"Removed: {addon.Name}. Your Stremio account was updated.";
+                    }
+                    catch (Exception ex)
+                    {
+                        StatusMessage = $"Removed: {addon.Name}. Your Stremio account will be updated on the next sync ({ex.Message}).";
+                    }
+                }
             }
             catch (Exception ex) { StatusMessage = $"Remove failed: {ex.Message}"; }
             finally { IsBusy = false; }

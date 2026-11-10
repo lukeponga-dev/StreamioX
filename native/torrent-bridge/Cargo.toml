@@ -20,6 +20,8 @@ tokio-util = { version = "0.7.17", features = ["io"] }
 url = "2.5"
 
 [profile.release]
-panic = "abort"
+# The FFI entry points rely on catch_unwind to turn panics into error codes;
+# panic = "abort" would terminate the host app instead.
+panic = "unwind"
 lto = true
 codegen-units = 1

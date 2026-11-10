@@ -36,7 +36,7 @@
   </ItemGroup>
 
   <Target Name="BuildTorrentBridge" BeforeTargets="PrepareForBuild" Condition="'$(Platform)' == 'x64' and '$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true' and '$(BuildTorrentBridge)' != 'false'">
-    <Exec Command="cargo +nightly build -Z build-std=std,panic_abort --manifest-path &quot;$(MSBuildProjectDirectory)\..\native\torrent-bridge\Cargo.toml&quot; --target x86_64-uwp-windows-msvc --release" />
+    <Exec Command="cargo +nightly build -Z build-std=std,panic_unwind --manifest-path &quot;$(MSBuildProjectDirectory)\..\native\torrent-bridge\Cargo.toml&quot; --target x86_64-uwp-windows-msvc --release" />
   </Target>
 
   <ItemGroup>
