@@ -9,6 +9,7 @@ using Windows.Media.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
+using Windows.UI.Xaml.Media;
 
 namespace StreamioX.App.Views
 {
@@ -58,11 +59,13 @@ namespace StreamioX.App.Views
             {
                 _osdTimer.Stop();
 
-                // Never hide the controls while paused or after playback has ended.
-                if (_mediaPlayer.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
-                    SetOsdVisible(false);
-                else
+                if (_mediaPlayer.PlaybackSession.PlaybackState != MediaPlaybackState.Playing)
+                {
                     SetOsdVisible(true);
+                    return;
+                }
+
+                SetOsdVisible(false);
             };
 
             Loaded += PlayerPage_Loaded;
@@ -71,7 +74,7 @@ namespace StreamioX.App.Views
         private void PlayerPage_Loaded(object sender, RoutedEventArgs e)
         {
             _playbackTimer.Start();
-            BackButton.Focus(Windows.UI.Xaml.FocusState.Programmatic);
+            PlayPauseButton.Focus(Windows.UI.Xaml.FocusState.Programmatic);
         }
 
         protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -430,13 +433,13 @@ namespace StreamioX.App.Views
 
         private void SetOsdVisible(bool visible)
         {
-            var opacity = visible ? 1.0 : 0.0;
+            var wasVisible = TopControls.Visibility == Visibility.Visible;
             var visibility = visible ? Visibility.Visible : Visibility.Collapsed;
 
-            TopControls.Opacity = opacity;
-            CenterControls.Opacity = opacity;
-            BottomControls.Opacity = opacity;
-            ProgressControls.Opacity = opacity;
+            TopControls.Opacity = visible ? 1.0 : 0.0;
+            CenterControls.Opacity = visible ? 1.0 : 0.0;
+            BottomControls.Opacity = visible ? 1.0 : 0.0;
+            ProgressControls.Opacity = visible ? 1.0 : 0.0;
 
             // Collapsed controls cannot receive invisible controller focus.
             TopControls.Visibility = visibility;
@@ -445,7 +448,16 @@ namespace StreamioX.App.Views
             ProgressControls.Visibility = visibility;
 
             if (!visible)
+            {
                 Focus(Windows.UI.Xaml.FocusState.Programmatic);
+            }
+            else if (!wasVisible &&
+                     (ReferenceEquals(Windows.UI.Xaml.Input.FocusManager.GetFocusedElement(), this) ||
+                      ReferenceEquals(Windows.UI.Xaml.Input.FocusManager.GetFocusedElement(), PlayerWidget)))
+            {
+                // A controller press while the OSD is hidden lands on a useful control.
+                PlayPauseButton.Focus(Windows.UI.Xaml.FocusState.Programmatic);
+            }
         }
 
         private void ShowOsd()
@@ -490,14 +502,29 @@ namespace StreamioX.App.Views
 
         private void PlayerPage_KeyDown(object sender, Windows.UI.Xaml.Input.KeyRoutedEventArgs e)
         {
-            // Any controller/keyboard activity reveals the OSD and restarts its hide timer.
+            // X is a true OSD toggle. Do not reveal the overlay before evaluating it.
+            if (e.Key == Windows.System.VirtualKey.GamepadX)
+            {
+                ToggleOsd();
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Windows.System.VirtualKey.GamepadB ||
+                e.Key == Windows.System.VirtualKey.Escape)
+            {
+                BackButton_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+                return;
+            }
+
+            // Any other controller/keyboard activity reveals the controls without
+            // stealing focus when the user is already navigating the OSD.
             ShowOsd();
 
             switch (e.Key)
             {
                 case Windows.System.VirtualKey.GamepadA:
-                    // Let the focused button/slider/selector handle A; only use A as a
-                    // play/pause shortcut when focus is on the video surface.
                     if (Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is Button ||
                         Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is ComboBox ||
                         Windows.UI.Xaml.Input.FocusManager.GetFocusedElement() is Slider)
@@ -518,19 +545,8 @@ namespace StreamioX.App.Views
                     e.Handled = true;
                     break;
 
-                case Windows.System.VirtualKey.GamepadX:
-                    ToggleOsd();
-                    e.Handled = true;
-                    break;
-
-                case Windows.System.VirtualKey.GamepadB:
-                case Windows.System.VirtualKey.Escape:
-                    BackButton_Click(this, new RoutedEventArgs());
-                    e.Handled = true;
-                    break;
-
-                // Keep D-pad/arrow keys available to Xbox XYFocus so the user can
-                // navigate between transport, timeline, audio, and subtitle controls.
+                // D-pad and left-stick directions remain unhandled so Xbox XYFocus
+                // can move between the timeline and all playback controls.
                 case Windows.System.VirtualKey.L:
                     SeekBy(TimeSpan.FromSeconds(10));
                     e.Handled = true;

@@ -13,21 +13,29 @@
         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="16" Margin="0,0,0,10">
             <TextBlock Text="Discover" Foreground="White" FontSize="34" FontWeight="SemiBold"/>
             <ProgressRing IsActive="{Binding IsLoading}" Width="22" Height="22" Foreground="#7B5CFF"/>
+            <Button x:Name="RetryButton" Content="Refresh" MinWidth="90" MinHeight="38"
+                    Padding="14,6" Click="RetryButton_Click"
+                    Background="#1A1C2C" Foreground="White"
+                    BorderBrush="#37344B" BorderThickness="1"/>
         </StackPanel>
         <StackPanel Grid.Row="1" Spacing="10" Margin="0,0,0,18">
-            <TextBlock Text="Browse by genre" Foreground="#B9B2D0" FontSize="15"/>
+            <TextBlock Text="Browse movies and series" Foreground="#B9B2D0" FontSize="15"/>
+            <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollMode="Disabled" IsTabStop="False">
+                <StackPanel x:Name="ContentTypePanel" Orientation="Horizontal" Spacing="10"/>
+            </ScrollViewer>
+            <TextBlock Text="Filter by genre" Foreground="#B9B2D0" FontSize="13"/>
             <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden"
                           VerticalScrollMode="Disabled" IsTabStop="False">
                 <StackPanel x:Name="GenreChipsPanel" Orientation="Horizontal" Spacing="10"/>
             </ScrollViewer>
             <TextBlock Text="{Binding StatusMessage}" Foreground="#9C96B2" FontSize="13"
                        TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF7777" FontSize="14"
+                       TextWrapping="Wrap"
+                       Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
         </StackPanel>
         <Grid Grid.Row="2">
-            <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF7777" FontSize="18"
-                       HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap"
-                       MaxWidth="900"
-                       Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
             <ScrollViewer x:Name="CatalogGrid" VerticalScrollMode="Enabled"
                           VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled"
                           HorizontalScrollBarVisibility="Disabled" Background="Transparent">
