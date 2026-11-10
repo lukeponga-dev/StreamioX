@@ -45,6 +45,11 @@ pub trait TorrentHandle: Send + Sync + Clone {
     fn name(&self) -> Option<String>;
 
     async fn stats(&self) -> EngineStats;
+    /// Wait until the backend has moved from metadata resolution into a
+    /// streamable storage state.
+    async fn wait_until_initialized(&self) -> Result<()> {
+        Ok(())
+    }
     async fn add_trackers(&self, trackers: Vec<String>) -> Result<()>;
     /// Cheap check for whether the torrent has finished downloading its wanted
     /// data. Unlike `stats()`, this must not rebuild the full statistics or walk

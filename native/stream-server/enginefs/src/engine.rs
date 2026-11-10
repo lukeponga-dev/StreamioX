@@ -432,6 +432,71 @@ impl<H: TorrentHandle> Engine<H> {
         Some(FileHandle::new(length, name, reader, self.clone()))
     }
 
+    /// Detailed streaming entry point for native adapters that need the
+    /// backend error instead of the legacy Option-based result.
+    pub async fn get_file_with_intent_detailed(
+        self: &Arc<Self>,
+        file_idx: usize,
+        start_offset: u64,
+        priority: u8,
+        intent: PlaybackIntent,
+    ) -> anyhow::Result<FileHandle<H>> {
+        self.touch();
+
+        // A newly-added librqbit torrent is not resumable while its state is
+        // still Initializing. Wait for metadata/storage to leave that state
+        // first, then resume it before asking the backend to create a reader.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            self.handle.wait_until_initialized(),
+        )
+        .await
+        .context("timed out waiting for torrent backend storage initialization")?
+        .context("torrent backend failed while initializing storage")?;
+
+        self.handle
+            .resume_torrent()
+            .await
+            .context("torrent backend could not resume after initialization")?;
+
+        let files = self.handle.get_files().await;
+        let file = files.get(file_idx).ok_or_else(|| {
+            anyhow::anyhow!(
+                "file index {file_idx} is out of range ({} metadata files available)",
+                files.len()
+            )
+        })?;
+        let length = file.length;
+        let name = file.name.clone();
+
+        if !self.handle.manages_playback_lifecycle()
+            && priority != 255
+            && start_offset == 0
+            && matches!(
+                intent,
+                PlaybackIntent::DirectInitial | PlaybackIntent::HlsInitial
+            )
+        {
+            self.handle
+                .prepare_file_for_streaming(file_idx)
+                .await
+                .context("backend failed to prepare selected file for streaming")?;
+        }
+
+        let reader = self
+            .handle
+            .get_file_reader(file_idx, start_offset, priority, None, intent)
+            .await
+            .with_context(|| {
+                format!(
+                    "backend failed to create reader for file {file_idx} ({name}, {length} bytes)"
+                )
+            })?;
+
+        self.active_streams.fetch_add(1, Ordering::SeqCst);
+        Ok(FileHandle::new(length, name, reader, self.clone()))
+    }
+
     pub async fn get_opensub_hash(self: &Arc<Self>, file_idx: usize) -> anyhow::Result<String> {
         if !self.handle.manages_playback_lifecycle() {
             return self.calculate_opensub_hash(file_idx).await;

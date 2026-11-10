@@ -19,7 +19,7 @@ use axum::{
 };
 use enginefs::{
     BackendEngineFS,
-    backend::{TorrentSource, TorrentHandle, priorities::PlaybackIntent, librqbit::{LibrqbitBackend, LibrqbitHandle}},
+    backend::{BackendFileInfo, TorrentSource, TorrentHandle, priorities::PlaybackIntent, librqbit::{LibrqbitBackend, LibrqbitHandle}},
 };
 use serde::Deserialize;
 use tokio::{io::{AsyncReadExt, AsyncSeekExt}, net::TcpListener, sync::oneshot};
@@ -74,6 +74,25 @@ struct StreamQuery {
     magnet: Option<String>,
 }
 
+fn parse_magnet_sources(magnet: &str) -> (Option<String>, Vec<String>) {
+    let Some((_, query)) = magnet.split_once('?') else {
+        return (None, Vec::new());
+    };
+
+    let mut exact_source = None;
+    let mut trackers = Vec::new();
+    for (key, value) in url::form_urlencoded::parse(query.as_bytes()) {
+        match key.as_ref() {
+            "xs" if value.starts_with("https://") || value.starts_with("http://") => {
+                exact_source = Some(value.into_owned());
+            }
+            "tr" if !value.trim().is_empty() => trackers.push(value.into_owned()),
+            _ => {}
+        }
+    }
+    (exact_source, trackers)
+}
+
 fn parse_range(headers: &HeaderMap, size: u64) -> Result<(u64, u64, bool), StatusCode> {
     let Some(value) = headers.get(header::RANGE) else {
         return Ok((0, size.saturating_sub(1), false));
@@ -91,9 +110,37 @@ fn parse_range(headers: &HeaderMap, size: u64) -> Result<(u64, u64, bool), Statu
     Ok((start, end, true))
 }
 
+fn resolve_file_index(requested: i64, files: &[BackendFileInfo]) -> Result<usize, StatusCode> {
+    if requested >= 0 {
+        return usize::try_from(requested).map_err(|_| StatusCode::NOT_FOUND);
+    }
+    if requested != -1 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Stremio fileIdx=-1 means the add-on leaves file selection to the
+    // player. Pick the largest supported video file rather than blindly
+    // selecting file zero (which is often a sample, subtitle or NFO).
+    files.iter()
+        .enumerate()
+        .filter(|(_, file)| {
+            std::path::Path::new(&file.name)
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .map(|extension| matches!(
+                    extension.to_ascii_lowercase().as_str(),
+                    "mp4" | "m4v" | "mov" | "mkv" | "webm" | "avi" | "wmv" | "ts" | "mpg" | "mpeg"
+                ))
+                .unwrap_or(false)
+        })
+        .max_by_key(|(_, file)| file.length)
+        .map(|(index, _)| index)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
 async fn stream_file(
     State(state): State<AppState>,
-    Path((hash, file_idx)): Path<(String, usize)>,
+    Path((hash, requested_file_idx)): Path<(String, i64)>,
     Query(query): Query<StreamQuery>,
     headers: HeaderMap,
     method: axum::http::Method,
@@ -102,9 +149,28 @@ async fn stream_file(
         Some(engine) => engine,
         None => {
             let magnet = query.magnet.ok_or(StatusCode::NOT_FOUND)?;
-            let added = state.engine.add_torrent(TorrentSource::Url(magnet), None)
-                .await.map_err(|_| StatusCode::BAD_GATEWAY)?;
+            let (exact_source, trackers) = parse_magnet_sources(&magnet);
+            let source = if let Some(source_url) = exact_source {
+                // librqbit's magnet parser intentionally consumes xt/tr/dn
+                // but does not resolve xs=. Fetch the exact .torrent URL
+                // directly so metadata is available without waiting for peers
+                // to send ut_metadata.
+                TorrentSource::Url(source_url)
+            } else {
+                TorrentSource::Url(magnet)
+            };
+            let added = tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                state.engine.add_torrent(source, Some(trackers.clone()))
+            ).await.map_err(|_| {
+                set_error(format!("Timed out adding torrent {} after 30 seconds", &hash[..hash.len().min(8)]));
+                StatusCode::GATEWAY_TIMEOUT
+            })?.map_err(|error| {
+                set_error(format!("Torrent add failed for {}: {error:#}", &hash[..hash.len().min(8)]));
+                StatusCode::BAD_GATEWAY
+            })?;
             if !added.info_hash.eq_ignore_ascii_case(&hash) {
+                set_error("Torrent metadata info hash did not match the requested info hash");
                 return Err(StatusCode::BAD_REQUEST);
             }
             added
@@ -119,8 +185,27 @@ async fn stream_file(
             }
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
         }
-    }).await.map_err(|_| StatusCode::GATEWAY_TIMEOUT)?;
-    let file = files.get(file_idx).ok_or(StatusCode::NOT_FOUND)?;
+    }).await.map_err(|_| {
+        set_error(format!(
+            "Timed out waiting for torrent metadata/files for {} after 60 seconds",
+            &hash[..hash.len().min(8)]
+        ));
+        StatusCode::GATEWAY_TIMEOUT
+    })?;
+    let file_idx = resolve_file_index(requested_file_idx, &files).map_err(|status| {
+        set_error(format!(
+            "Could not select video file for {} (requested file index {}, {} files available)",
+            &hash[..hash.len().min(8)],
+            requested_file_idx,
+            files.len()
+        ));
+        status
+    })?;
+    let file = files.get(file_idx).ok_or_else(|| {
+        set_error(format!("Selected file index {file_idx} is out of range"));
+        StatusCode::NOT_FOUND
+    })?;
+    set_error("");
     let size = file.length;
     let (start, end, partial) = parse_range(&headers, size)?;
     let length = if size == 0 { 0 } else { end - start + 1 };
@@ -140,12 +225,92 @@ async fn stream_file(
     }
 
     let intent = if start == 0 { PlaybackIntent::DirectInitial } else { PlaybackIntent::DirectSeek };
-    let mut reader = engine.get_file_with_intent(file_idx, start, 128, intent)
-        .await.ok_or(StatusCode::BAD_GATEWAY)?;
-    reader.seek(SeekFrom::Start(start)).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut reader = match engine
+        .get_file_with_intent_detailed(file_idx, start, 128, intent)
+        .await
+    {
+        Ok(reader) => reader,
+        Err(error) => {
+            let stats = engine.handle.stats().await;
+            set_error(format!(
+                "Failed to open torrent file {} (index {}, {} bytes) for {}: {error:#}; peers={}, download={} B/s, metadata={}",
+                file.name,
+                file_idx,
+                file.length,
+                &hash[..hash.len().min(8)],
+                stats.peers,
+                stats.download_speed,
+                stats.has_metadata
+            ));
+            return Err(StatusCode::BAD_GATEWAY);
+        }
+    };
+    reader.seek(SeekFrom::Start(start)).await.map_err(|error| {
+        set_error(format!("Failed to seek torrent file {} to byte {start}: {error}", file.name));
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     let bounded = reader.take(length);
     let body = Body::from_stream(ReaderStream::new(bounded));
     response.body(body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_magnet_sources, resolve_file_index};
+    use enginefs::backend::BackendFileInfo;
+    use axum::http::StatusCode;
+
+    fn file(name: &str, length: u64) -> BackendFileInfo {
+        BackendFileInfo { name: name.to_string(), length }
+    }
+
+    #[test]
+    fn magnet_exact_source_and_trackers_are_decoded() {
+        let magnet = "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&tr=udp%3A%2F%2Ftracker.example%3A1337%2Fannounce&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fbig-buck-bunny.torrent";
+        let (source, trackers) = parse_magnet_sources(magnet);
+        assert_eq!(
+            source.as_deref(),
+            Some("https://webtorrent.io/torrents/big-buck-bunny.torrent")
+        );
+        assert_eq!(trackers, vec!["udp://tracker.example:1337/announce"]);
+    }
+
+    #[test]
+    fn magnet_exact_source_rejects_non_http_schemes() {
+        let magnet = "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&xs=file%3A%2F%2F%2Fprivate.torrent";
+        let (source, _) = parse_magnet_sources(magnet);
+        assert!(source.is_none());
+    }
+
+    #[test]
+    fn automatic_selection_chooses_largest_video_not_first_file() {
+        let files = vec![
+            file("Subs/movie.en.srt", 20_000),
+            file("movie-sample.mp4", 2_000_000),
+            file("movie.mkv", 900_000_000),
+            file("readme.nfo", 4_000),
+        ];
+        assert_eq!(resolve_file_index(-1, &files), Ok(2));
+    }
+
+    #[test]
+    fn explicit_file_index_is_preserved() {
+        let files = vec![file("a.srt", 10), file("b.mp4", 20)];
+        assert_eq!(resolve_file_index(0, &files), Ok(0));
+        assert_eq!(resolve_file_index(1, &files), Ok(1));
+    }
+
+    #[test]
+    fn unsupported_negative_file_index_is_rejected() {
+        let files = vec![file("movie.mp4", 20)];
+        assert_eq!(resolve_file_index(-2, &files), Err(StatusCode::BAD_REQUEST));
+    }
+
+    #[test]
+    fn automatic_selection_fails_when_no_video_file_exists() {
+        let files = vec![file("captions.srt", 10), file("info.nfo", 20)];
+        assert_eq!(resolve_file_index(-1, &files), Err(StatusCode::NOT_FOUND));
+    }
 }
 
 fn app(state: AppState) -> Router {

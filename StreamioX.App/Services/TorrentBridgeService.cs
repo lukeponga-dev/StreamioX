@@ -32,15 +32,20 @@ namespace StreamioX.App.Services
                 throw new ArgumentNullException(nameof(stream));
 
             var infoHash = NormalizeInfoHash(stream.InfoHash);
-            var trackers = stream.Sources?
+            var sourceTrackers = stream.Sources?
                 .Where(source => !string.IsNullOrWhiteSpace(source))
                 .Select(source => source.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList() ?? new List<string>();
+            var magnetTrackers = new List<string>();
+            string? originalMagnet = null;
 
-            if (TryReadMagnet(stream.Url, out var magnetHash, out var magnetTrackers))
+            if (TryReadMagnet(stream.Url, out var magnetHash, out magnetTrackers))
             {
                 infoHash ??= magnetHash;
-                trackers.AddRange(magnetTrackers);
+                // Preserve xs= (exact torrent source), ws= (web seed), dn=,
+                // and every other provider-supplied magnet parameter.
+                originalMagnet = stream.Url;
             }
 
             if (infoHash == null)
@@ -61,12 +66,23 @@ namespace StreamioX.App.Services
                 _port!.Value,
                 $"/stream/{infoHash}/{fileIndex}");
 
-            // The native stream route reads repeated tr= query parameters.
-            // A nested magnet= parameter is ignored by that route, so forward
-            // the add-on's tracker list using the server's actual contract.
-            builder.Query = string.Join("&", trackers
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(tracker => "tr=" + Uri.EscapeDataString(tracker)));
+            // The native route adds a torrent on first access from its
+            // "magnet" query parameter. Preserve the original magnet URI so
+            // exact torrent sources (xs=) and web seeds (ws=) survive too.
+            var magnet = new StringBuilder(
+                originalMagnet ?? $"magnet:?xt=urn:btih:{infoHash}");
+            var includedTrackers = new HashSet<string>(
+                magnetTrackers, StringComparer.OrdinalIgnoreCase);
+            foreach (var tracker in sourceTrackers)
+            {
+                if (includedTrackers.Add(tracker))
+                    magnet.Append("&tr=").Append(Uri.EscapeDataString(tracker));
+            }
+
+            var trackerCount = includedTrackers.Count;
+            builder.Query = "magnet=" + Uri.EscapeDataString(magnet.ToString());
+            PlaybackDiagnostics.Write(
+                $"[Torrent] Prepared local stream route for hash {infoHash[..8]}…; file index {fileIndex}; trackers {trackerCount}; preserved original magnet: {originalMagnet != null}.");
             return builder.Uri.AbsoluteUri;
         }
 
@@ -180,6 +196,8 @@ namespace StreamioX.App.Services
                     throw new InvalidOperationException("Torrent engine started without returning a listening port.");
 
                 _port = result.Port;
+                PlaybackDiagnostics.Write(
+                    $"[Torrent] Native engine started successfully on 127.0.0.1:{_port.Value}.");
             }
             catch (DllNotFoundException ex)
             {

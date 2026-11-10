@@ -1,6 +1,8 @@
 using System;
+using System.Threading.Tasks;
 using StreamioX.App.Navigation;
 using StreamioX.App.ViewModels;
+using StreamioX.App.Services;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -11,11 +13,13 @@ namespace StreamioX.App.Views
     {
         public MainViewModel ViewModel { get; }
         private readonly INavigationService _navigationService;
+        private readonly IAuthService _authService;
 
         public MainPage()
         {
             InitializeComponent();
             _navigationService = AppServices.GetRequiredService<INavigationService>();
+            _authService = AppServices.GetRequiredService<IAuthService>();
             _navigationService.Initialize(ContentFrame);
             ContentFrame.NavigationFailed += ContentFrame_NavigationFailed;
             ViewModel = AppServices.GetRequiredService<MainViewModel>();
@@ -27,8 +31,11 @@ namespace StreamioX.App.Views
         private void MainPage_Loaded(object sender, RoutedEventArgs e)
         {
             SystemNavigationManager.GetForCurrentView().BackRequested += System_BackRequested;
+            _authService.SessionChanged -= AuthService_SessionChanged;
+            _authService.SessionChanged += AuthService_SessionChanged;
             NavShell.SelectedItem = HomeNavItem;
             if (ContentFrame.Content == null) ViewModel.NavigateToHomeCommand.Execute(null);
+            _ = RefreshProfileAsync();
             HomeNavItem.Focus(FocusState.Programmatic);
         }
 
@@ -60,6 +67,43 @@ namespace StreamioX.App.Views
         private void MainPage_Unloaded(object sender, RoutedEventArgs e)
         {
             SystemNavigationManager.GetForCurrentView().BackRequested -= System_BackRequested;
+            _authService.SessionChanged -= AuthService_SessionChanged;
+        }
+
+        private async Task RefreshProfileAsync()
+        {
+            await _authService.InitializeAsync();
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, UpdateProfileUi);
+        }
+
+        private async void AuthService_SessionChanged(object? sender, EventArgs e)
+        {
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, UpdateProfileUi);
+        }
+
+        private void UpdateProfileUi()
+        {
+            var displayName = "Sign In";
+            if (_authService.IsLoggedIn)
+            {
+                displayName = _authService.User?.Name?.Trim() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(displayName))
+                {
+                    var email = _authService.User?.Email?.Trim();
+                    if (!string.IsNullOrWhiteSpace(email))
+                    {
+                        var separator = email.IndexOf('@');
+                        displayName = separator > 0 ? email.Substring(0, separator) : email;
+                    }
+                    else
+                    {
+                        displayName = "Stremio";
+                    }
+                }
+            }
+
+            ProfileNameText.Text = displayName;
+            FlyoutProfileNameText.Text = displayName;
         }
 
         private void System_BackRequested(object sender, BackRequestedEventArgs e)

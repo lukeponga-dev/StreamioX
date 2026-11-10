@@ -6,6 +6,7 @@ use crate::backend::{
 use anyhow::{Context, Result};
 use librqbit::{ManagedTorrent, Session};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -56,6 +57,7 @@ impl LibrqbitBackend {
                     LibrqbitHandle {
                         handle: handle.clone(),
                         info_hash,
+                        session: session.clone(),
                     },
                 );
             }
@@ -84,7 +86,11 @@ impl LibrqbitBackend {
                                         {
                                             restored_handles.insert(
                                                 info_hash.clone(),
-                                                LibrqbitHandle { handle, info_hash },
+                                                LibrqbitHandle {
+                                                    handle,
+                                                    info_hash,
+                                                    session: session.clone(),
+                                                },
                                             );
                                         }
                                     }
@@ -104,6 +110,7 @@ impl LibrqbitBackend {
 pub struct LibrqbitHandle {
     pub handle: Arc<ManagedTorrent>,
     pub info_hash: String,
+    pub session: Arc<Session>,
 }
 
 #[async_trait::async_trait]
@@ -115,11 +122,27 @@ impl TorrentBackend for LibrqbitBackend {
         source: TorrentSource,
         trackers: Vec<String>,
     ) -> Result<Self::Handle> {
-        let add_torrent = match source {
-            TorrentSource::Url(url) => librqbit::AddTorrent::Url(url.into()),
-            TorrentSource::Bytes(bytes) => {
-                librqbit::AddTorrent::from_bytes(bytes::Bytes::from(bytes))
+        let (add_torrent, initial_peers) = match source {
+            TorrentSource::Url(url) => {
+                // Preserve BEP 9 magnet x.pe= initial peer hints. These are
+                // especially useful for local diagnostics and private swarms
+                // where DHT or public trackers are unavailable.
+                let mut initial_peers = Vec::<SocketAddr>::new();
+                if let Some((_, query)) = url.split_once('?') {
+                    for (key, value) in url::form_urlencoded::parse(query.as_bytes()) {
+                        if key == "x.pe" {
+                            if let Ok(peer) = value.parse::<SocketAddr>() {
+                                initial_peers.push(peer);
+                            }
+                        }
+                    }
+                }
+                (librqbit::AddTorrent::Url(url.into()), initial_peers)
             }
+            TorrentSource::Bytes(bytes) => (
+                librqbit::AddTorrent::from_bytes(bytes::Bytes::from(bytes)),
+                Vec::new(),
+            ),
         };
         let response = self
             .session
@@ -128,6 +151,7 @@ impl TorrentBackend for LibrqbitBackend {
                 Some(librqbit::AddTorrentOptions {
                     overwrite: true,
                     trackers: Some(trackers),
+                    initial_peers: Some(initial_peers),
                     ..Default::default()
                 }),
             )
@@ -143,6 +167,7 @@ impl TorrentBackend for LibrqbitBackend {
         Ok(LibrqbitHandle {
             handle,
             info_hash: "".to_string(), // Will be updated by Engine
+            session: self.session.clone(),
         })
     }
 
@@ -174,6 +199,33 @@ impl TorrentHandle for LibrqbitHandle {
             .metadata
             .load_full()
             .and_then(|m| m.info.name.as_ref().map(|n| n.to_string()))
+    }
+
+    async fn wait_until_initialized(&self) -> Result<()> {
+        self.handle
+            .wait_until_initialized()
+            .await
+            .context("librqbit torrent storage did not finish initialization")
+    }
+
+    async fn resume_torrent(&self) -> Result<()> {
+        if self.handle.is_paused() {
+            self.session
+                .unpause(&self.handle)
+                .await
+                .context("Failed to resume paused librqbit torrent")?;
+        }
+        Ok(())
+    }
+
+    async fn pause_torrent(&self) -> Result<()> {
+        if !self.handle.is_paused() {
+            self.session
+                .pause(&self.handle)
+                .await
+                .context("Failed to pause librqbit torrent")?;
+        }
+        Ok(())
     }
 
     async fn stats(&self) -> EngineStats {
@@ -350,6 +402,7 @@ impl Clone for LibrqbitHandle {
         Self {
             handle: self.handle.clone(),
             info_hash: self.info_hash.clone(),
+            session: self.session.clone(),
         }
     }
 }

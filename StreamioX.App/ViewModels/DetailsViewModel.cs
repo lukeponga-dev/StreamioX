@@ -219,7 +219,7 @@ namespace StreamioX.App.ViewModels
             return full;
         }
 
-        private void OpenPlayer(string streamUrl, StreamSource stream)
+        private void OpenPlayer(string streamUrl, StreamSource stream, bool forwardProxyHeaders = true)
         {
             var title = !string.IsNullOrWhiteSpace(SelectedEpisode?.Title)
                 ? SelectedEpisode.Title
@@ -227,8 +227,14 @@ namespace StreamioX.App.ViewModels
                     ? SelectedMovie.Title
                     : stream.Title ?? "Now Playing";
 
+            // Add-on proxy headers belong to the provider's remote URL. The
+            // torrent bridge is a local loopback endpoint and must not receive
+            // provider cookies or Authorization values.
+            var requestHeaders = forwardProxyHeaders
+                ? stream.BehaviorHints?.ProxyHeaders?.Request
+                : null;
             var request = new PlaybackRequest(streamUrl, title,
-                requestHeaders: stream.BehaviorHints?.ProxyHeaders?.Request);
+                requestHeaders: requestHeaders);
             if (!_navigationService.NavigateTo(NavigationRoute.Player, request))
                 ErrorMessage = "The player could not be opened. Please try selecting the stream again.";
         }
@@ -257,16 +263,20 @@ namespace StreamioX.App.ViewModels
 
             try
             {
+                var trackerCount = stream.Sources?.Count(source => !string.IsNullOrWhiteSpace(source)) ?? 0;
+                PlaybackDiagnostics.Write(
+                    $"[Torrent] Torrent stream selected; info hash present: {!string.IsNullOrWhiteSpace(stream.InfoHash)}; file index: {stream.FileIdx?.ToString() ?? "automatic"}; tracker entries: {trackerCount}.");
                 ErrorMessage = "Starting the torrent engine and preparing the stream...";
                 var streamUrl = await _torrentBridgeService
                     .GetStreamUrlAsync(stream, CancellationToken.None)
                     .ConfigureAwait(true);
 
                 ErrorMessage = null;
-                OpenPlayer(streamUrl, stream);
+                OpenPlayer(streamUrl, stream, forwardProxyHeaders: false);
             }
             catch (Exception ex)
             {
+                PlaybackDiagnostics.Write($"[Torrent] Failed to prepare torrent stream: 0x{ex.HResult:X8} {ex}");
                 ErrorMessage = $"Unable to start torrent playback: {ex.Message}";
             }
         }

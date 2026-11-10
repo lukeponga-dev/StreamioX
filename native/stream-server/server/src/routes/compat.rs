@@ -176,10 +176,7 @@ pub fn resolve_file_idx(
 
 pub fn is_xbox_native_video_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    matches!(
-        lower.rsplit('.').next(),
-        Some("mp4" | "m4v" | "wmv" | "ts")
-    )
+    matches!(lower.rsplit('.').next(), Some("mp4" | "m4v" | "wmv" | "ts"))
 }
 
 pub fn is_video_name(name: &str) -> bool {

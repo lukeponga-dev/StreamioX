@@ -29,6 +29,15 @@ namespace StreamioX.App.Services
             Timeout = Timeout.InfiniteTimeSpan
         };
 
+        // The torrent bridge is an in-process loopback server. Do not route
+        // requests to it through a system proxy, and do not follow redirects
+        // away from the local adapter.
+        private static readonly HttpClient LocalHttp = new HttpClient(
+            new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+
         /// <summary>
         /// Defines the _mediaSource
         /// </summary>
@@ -73,7 +82,7 @@ namespace StreamioX.App.Services
                     { "reconnect_streamed", 1 },
                     { "reconnect_on_network_error", 1 },
                     { "rw_timeout", "15000000" },
-                    { "user_agent", UserAgent },
+                    { "user_agent", GetFfmpegUserAgent(requestHeaders) },
                     { "headers", BuildFfmpegHeaders(requestHeaders) }
                 }
             };
@@ -85,7 +94,13 @@ namespace StreamioX.App.Services
             reportStage?.Invoke("Opening original stream URL with FFmpegInteropX");
             PlaybackDiagnostics.Write("[Playback] Creating FFmpegMediaSource from original URI.");
             PlaybackDiagnostics.Write($"[Playback] FFmpeg input scheme: {uri.Scheme}; host: {uri.Host}; port: {uri.Port}; path length: {uri.AbsolutePath.Length}.");
-            PlaybackDiagnostics.Write($"[Playback] Forwarding {requestHeaders?.Count ?? 0} request header(s) to FFmpeg; values are intentionally not logged.");
+            var forwardedHeaderNames = requestHeaders == null
+                ? string.Empty
+                : string.Join(", ", requestHeaders.Keys);
+            PlaybackDiagnostics.Write(
+                $"[Playback] Forwarding {requestHeaders?.Count ?? 0} request header(s) to FFmpeg" +
+                (string.IsNullOrEmpty(forwardedHeaderNames) ? "." : $": {forwardedHeaderNames}.") +
+                " Header values are intentionally not logged.");
             try
             {
                 // The probe is diagnostic only. Do not substitute its redirect target:
@@ -137,12 +152,36 @@ namespace StreamioX.App.Services
             request.Headers.Accept.ParseAdd("*/*");
             ApplyRequestHeaders(request, requestHeaders);
 
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            using var response = await Http.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                timeout.Token).ConfigureAwait(true);
+            // A direct provider URL should fail quickly when expired or
+            // blocked. A torrent loopback route can legitimately spend up to
+            // 60 seconds resolving metadata and selecting the video file.
+            var isLocalBridge = uri.IsLoopback;
+            var probeTimeout = TimeSpan.FromSeconds(isLocalBridge ? 75 : 15);
+            PlaybackDiagnostics.Write(
+                $"[Playback] HTTP probe timeout: {probeTimeout.TotalSeconds:0}s; local bridge: {isLocalBridge}.");
+            using var timeout = new CancellationTokenSource(probeTimeout);
+            var client = isLocalBridge ? LocalHttp : Http;
+            HttpResponseMessage response;
+            try
+            {
+                response = await client.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    timeout.Token).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (!isLocalBridge &&
+                (ex is HttpRequestException || ex is TaskCanceledException))
+            {
+                // Provider CDNs frequently reject diagnostic range requests,
+                // rate-limit secondary clients, or behave differently from FFmpeg.
+                // The probe must not prevent FFmpeg from attempting the real stream.
+                PlaybackDiagnostics.Write(
+                    $"[Playback] External HTTP probe unavailable ({ex.GetType().Name}, HRESULT 0x{ex.HResult:X8}); continuing with the original URL in FFmpeg.");
+                return uri;
+            }
 
+            using (response)
+            {
             var contentType = response.Content.Headers.ContentType?.MediaType ?? "unknown";
             var finalUri = response.RequestMessage?.RequestUri ?? uri;
 
@@ -165,21 +204,37 @@ namespace StreamioX.App.Services
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new HttpRequestException(
-                    $"Direct stream returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}). " +
-                    $"Content-Type: {contentType}; final host: {finalUri.Host}. " +
-                    "The URL may be expired, blocked, or require request headers.");
+                if (isLocalBridge)
+                {
+                    var nativeError = StreamioX.App.NativeBridge.ReadLastError();
+                    if (!string.IsNullOrWhiteSpace(nativeError))
+                        PlaybackDiagnostics.Write($"[Torrent] Native bridge diagnostic: {nativeError}");
+
+                    // A local 4xx/5xx means the bridge has not produced media.
+                    // Unlike a provider probe, FFmpeg cannot recover this request.
+                    throw new HttpRequestException(
+                        $"Local torrent bridge returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}). " +
+                        $"Content-Type: {contentType}; host: {finalUri.Host}.");
+                }
+
+                PlaybackDiagnostics.Write(
+                    $"[Playback] External probe returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}); allowing FFmpeg to attempt the original URL.");
+                return uri;
             }
 
             if (contentType.Equals("text/html", StringComparison.OrdinalIgnoreCase) ||
                 contentType.Equals("application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException(
-                    $"The stream URL returned an HTML page instead of media (HTTP {(int)response.StatusCode}, " +
-                    $"host {finalUri.Host}). This usually means a login, anti-bot page, expired link, or redirect.");
+                if (isLocalBridge)
+                    throw new InvalidOperationException("The local torrent bridge returned HTML instead of media.");
+
+                PlaybackDiagnostics.Write(
+                    $"[Playback] External probe returned HTML (HTTP {(int)response.StatusCode}, host {finalUri.Host}); allowing FFmpeg to attempt the original URL with provider headers.");
+                return uri;
             }
 
             return finalUri;
+            }
         }
 
         /// <summary>
@@ -197,7 +252,8 @@ namespace StreamioX.App.Services
                 if (header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
                     header.Key.Equals("Range", StringComparison.OrdinalIgnoreCase) ||
                     header.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase) ||
-                    header.Key.Equals("Connection", StringComparison.OrdinalIgnoreCase)) continue;
+                    header.Key.Equals("Connection", StringComparison.OrdinalIgnoreCase) ||
+                    header.Key.Equals("User-Agent", StringComparison.OrdinalIgnoreCase)) continue;
                 if (header.Key.IndexOfAny(new[] { '\r', '\n', ':' }) >= 0 ||
                     header.Value.IndexOfAny(new[] { '\r', '\n' }) >= 0) continue;
                 request.Headers.Remove(header.Key);
@@ -210,6 +266,23 @@ namespace StreamioX.App.Services
         /// </summary>
         /// <param name="headers">The headers<see cref="System.Collections.Generic.IReadOnlyDictionary{string, string}?"/></param>
         /// <returns>The <see cref="string"/></returns>
+        private static string GetFfmpegUserAgent(
+            System.Collections.Generic.IReadOnlyDictionary<string, string>? headers)
+        {
+            if (headers != null)
+            {
+                foreach (var header in headers)
+                {
+                    if (header.Key.Equals("User-Agent", StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(header.Value) &&
+                        header.Value.IndexOfAny(new[] { '\r', '\n' }) < 0)
+                        return header.Value;
+                }
+            }
+
+            return UserAgent;
+        }
+
         private static string BuildFfmpegHeaders(
             System.Collections.Generic.IReadOnlyDictionary<string, string>? headers)
         {
@@ -221,7 +294,8 @@ namespace StreamioX.App.Services
                 if (header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
                     header.Key.Equals("Range", StringComparison.OrdinalIgnoreCase) ||
                     header.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase) ||
-                    header.Key.Equals("Connection", StringComparison.OrdinalIgnoreCase)) continue;
+                    header.Key.Equals("Connection", StringComparison.OrdinalIgnoreCase) ||
+                    header.Key.Equals("User-Agent", StringComparison.OrdinalIgnoreCase)) continue;
                 if (header.Key.IndexOfAny(new[] { '\r', '\n', ':' }) >= 0 ||
                     header.Value.IndexOfAny(new[] { '\r', '\n' }) >= 0) continue;
                 builder.Append(header.Key).Append(": ").Append(header.Value).Append("\r\n");

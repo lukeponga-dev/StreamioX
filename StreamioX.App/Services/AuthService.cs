@@ -29,6 +29,8 @@ namespace StreamioX.App.Services
         private readonly SemaphoreSlim _initializeLock = new(1, 1);
         private bool _initialized;
 
+        public event EventHandler? SessionChanged;
+
         public bool IsLoggedIn => !string.IsNullOrWhiteSpace(AuthKey);
         public string? AuthKey { get; private set; }
         public StremioUser? User { get; private set; }
@@ -71,6 +73,7 @@ namespace StreamioX.App.Services
                 }
 
                 _initialized = true;
+                SessionChanged?.Invoke(this, EventArgs.Empty);
             }
             finally
             {
@@ -187,6 +190,7 @@ namespace StreamioX.App.Services
             AuthKey = authKey;
             User = user;
             Persist();
+            SessionChanged?.Invoke(this, EventArgs.Empty);
             if (User == null)
             {
                 try { await RefreshUserAsync(cancellationToken).ConfigureAwait(false); }
@@ -213,6 +217,7 @@ namespace StreamioX.App.Services
             AuthKey = result.AuthKey;
             User = result.User;
             Persist();
+            SessionChanged?.Invoke(this, EventArgs.Empty);
             await SyncAfterLoginAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -228,6 +233,7 @@ namespace StreamioX.App.Services
             {
                 await RefreshUserAsync(cancellationToken).ConfigureAwait(false);
                 Persist();
+                SessionChanged?.Invoke(this, EventArgs.Empty);
                 await SyncAfterLoginAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
@@ -257,6 +263,7 @@ namespace StreamioX.App.Services
             User = null;
             LastAddonSyncMessage = "Signed out of Stremio.";
             ClearPersist();
+            SessionChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public async Task RefreshUserAsync(CancellationToken cancellationToken = default)
@@ -269,6 +276,7 @@ namespace StreamioX.App.Services
 
             User = user;
             Persist();
+            SessionChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public async Task<AddonAccountSyncResult> SyncAddonCollectionAsync(CancellationToken cancellationToken = default)
@@ -480,9 +488,11 @@ namespace StreamioX.App.Services
             {
                 return;
             }
-            catch (UnauthorizedAccessException)
+            catch (Exception)
             {
-                // The vault may be unavailable in a restricted app context.
+                // Credential cleanup is best-effort. The vault may be empty,
+                // unavailable, or report a WinRT-specific failure. Do not let
+                // that prevent saving a newly received authentication key.
                 return;
             }
 
@@ -492,15 +502,10 @@ namespace StreamioX.App.Services
                 {
                     vault.Remove(credential);
                 }
-                catch (System.Runtime.InteropServices.COMException ex)
-                    when (ex.HResult == unchecked((int)0x80070490))
+                catch (Exception)
                 {
-                    // Another operation may already have removed this entry.
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    // Do not let optional cleanup interrupt authentication.
-                    return;
+                    // Entries can disappear between enumeration and removal.
+                    // Ignore cleanup failures; PersistAuthKey will still try Add.
                 }
             }
         }

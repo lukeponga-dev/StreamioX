@@ -9,7 +9,7 @@
   <Identity
     Name="60041d50-94b9-4e14-a40d-16d2c929fffa"
     Publisher="CN=lukeg"
-    Version="1.0.0.1" />
+    Version="1.0.0.9" />
 
   <mp:PhoneIdentity PhoneProductId="60041d50-94b9-4e14-a40d-16d2c929fffa" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
@@ -40,7 +40,7 @@
         Square44x44Logo="Assets\Square44x44Logo.png"
         Description="A controller-first UWP/XAML client for evaluating the Stremio experience on Xbox One and Xbox Series X|S."
         BackgroundColor="transparent">
-        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png"/>
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square71x71Logo="Assets\SmallTile.png" Square310x310Logo="Assets\LargeTile.png"/>
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
     </Application>

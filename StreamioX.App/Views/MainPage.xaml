@@ -43,14 +43,14 @@
                 <Border Width="30" Height="30" CornerRadius="15" Background="#173C2A" BorderBrush="#20E66B" BorderThickness="1">
                     <FontIcon Glyph="&#xE77B;" Foreground="#B9FFD0" FontSize="17"/>
                 </Border>
-                <TextBlock Text="Luke" Foreground="White" VerticalAlignment="Center" FontSize="14"/>
+                <TextBlock x:Name="ProfileNameText" Text="Sign In" Foreground="White" VerticalAlignment="Center" FontSize="14"/>
                 <TextBlock Text="⌄" Foreground="#A0ADB3" VerticalAlignment="Center"/>
             </StackPanel>
             <Button.Flyout>
                 <Flyout Placement="Bottom">
                     <Border Width="220" Padding="14" Background="#0C1419">
                         <StackPanel Spacing="9">
-                            <TextBlock Text="Luke" Foreground="White" FontSize="18" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="FlyoutProfileNameText" Text="Sign In" Foreground="White" FontSize="18" FontWeight="SemiBold"/>
                             <TextBlock Text="STREAMIOX PROFILE" Foreground="#91A29A" FontSize="11"/>
                             <Rectangle Height="1" Fill="#263B33"/>
                             <Button Content="My Library" HorizontalAlignment="Stretch" Click="ProfileLibrary_Click"/>

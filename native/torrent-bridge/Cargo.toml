@@ -14,6 +14,7 @@ axum = { version = "0.8.8", default-features = false, features = ["http1", "toki
 bytes = "1"
 serde = { version = "1", features = ["derive"] }
 enginefs = { path = "../stream-server/enginefs", default-features = false, features = ["librqbit"] }
+librqbit = "8.1.1"
 tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "net", "sync", "time", "fs", "io-util"] }
 tokio-util = { version = "0.7.17", features = ["io"] }
 url = "2.5"

@@ -20,10 +20,16 @@ pub const DEFAULT_HTTPS_PORT: u16 = 12470;
 pub static GLOBAL_STATE: once_cell::sync::Lazy<std::sync::RwLock<Option<AppState>>> =
     once_cell::sync::Lazy::new(|| std::sync::RwLock::new(None));
 
-#[cfg(all(any(target_os = "windows", target_os = "macos", target_os = "linux"), not(target_vendor = "uwp")))]
+#[cfg(all(
+    any(target_os = "windows", target_os = "macos", target_os = "linux"),
+    not(target_vendor = "uwp")
+))]
 pub mod tray;
 
-#[cfg(any(not(any(target_os = "windows", target_os = "macos", target_os = "linux")), target_vendor = "uwp"))]
+#[cfg(any(
+    not(any(target_os = "windows", target_os = "macos", target_os = "linux")),
+    target_vendor = "uwp"
+))]
 pub mod tray {
     #[derive(Default)]
     pub struct TrayStats;
@@ -318,9 +324,13 @@ async fn run_inner(
                 .try_init()
         } else if {
             #[cfg(not(target_vendor = "uwp"))]
-            { std::io::stdout().is_terminal() }
+            {
+                std::io::stdout().is_terminal()
+            }
             #[cfg(target_vendor = "uwp")]
-            { false }
+            {
+                false
+            }
         } {
             registry
                 .with(human_file_layer)

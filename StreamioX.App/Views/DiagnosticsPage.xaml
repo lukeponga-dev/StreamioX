@@ -17,6 +17,15 @@
                     Background="#7B5CFF"
                     Foreground="White"
                     FontSize="17"/>
+            <Button Content="Play Big Buck Bunny torrent test"
+                    Click="PlayBigBuckBunnyTorrent_Click"
+                    HorizontalAlignment="Left"
+                    Padding="24,14"
+                    Background="#29243F"
+                    Foreground="White"
+                    FontSize="17"/>
+            <TextBlock Text="Torrent test: local librqbit seeder on TCP 50000; verifies peer discovery, metadata, automatic file selection and HTTP byte ranges."
+                       Foreground="#737B8C" FontSize="12" TextWrapping="Wrap"/>
             <TextBlock Text="Source: Big Buck Bunny 720p H.264 MP4 sample (10 seconds)"
                        Foreground="#737B8C" FontSize="12"/>
         </StackPanel>

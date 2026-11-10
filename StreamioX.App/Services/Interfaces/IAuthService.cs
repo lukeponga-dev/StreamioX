@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using StreamioX.App.Models;
@@ -6,6 +7,7 @@ namespace StreamioX.App.Services
 {
     public interface IAuthService
     {
+        event EventHandler? SessionChanged;
         bool IsLoggedIn { get; }
         string? AuthKey { get; }
         StremioUser? User { get; }
