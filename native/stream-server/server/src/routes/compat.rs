@@ -155,13 +155,31 @@ pub fn resolve_file_idx(
         return Ok(file.index);
     }
 
+    // Prefer containers that the Xbox/UWP Media Foundation pipeline can
+    // normally open without third-party codecs. A torrent often contains
+    // several video encodes; picking the largest MKV by default can produce
+    // "unsupported file type or invalid path" even when an MP4 is available.
     files
         .iter()
-        .filter(|file| is_video_name(&file.name))
+        .filter(|file| is_xbox_native_video_name(&file.name))
         .max_by_key(|file| file.length)
+        .or_else(|| {
+            files
+                .iter()
+                .filter(|file| is_video_name(&file.name))
+                .max_by_key(|file| file.length)
+        })
         .or_else(|| files.iter().max_by_key(|file| file.length))
         .map(|file| file.index)
         .ok_or_else(|| "No playable file found".to_string())
+}
+
+pub fn is_xbox_native_video_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    matches!(
+        lower.rsplit('.').next(),
+        Some("mp4" | "m4v" | "wmv" | "ts")
+    )
 }
 
 pub fn is_video_name(name: &str) -> bool {
@@ -288,6 +306,24 @@ mod tests {
         ];
 
         assert_eq!(resolve_file_idx("-1", &files, &[]).unwrap(), 2);
+    }
+
+    #[test]
+    fn prefers_xbox_native_container_over_larger_mkv() {
+        let files = vec![
+            FileCandidate {
+                index: 0,
+                name: "large-release.mkv".to_string(),
+                length: 20_000,
+            },
+            FileCandidate {
+                index: 1,
+                name: "compatible-copy.mp4".to_string(),
+                length: 10_000,
+            },
+        ];
+
+        assert_eq!(resolve_file_idx("-1", &files, &[]).unwrap(), 1);
     }
 
     #[test]

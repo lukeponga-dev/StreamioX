@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,7 +11,7 @@ namespace StreamioX.App.Services
 {
     public sealed partial class TorrentBridgeService : ITorrentBridgeService
     {
-        private const string NativeLibrary = "streamio_torrent_bridge";
+        private const ushort RequestedPort = 11470;
         private readonly SemaphoreSlim _startGate = new(1, 1);
         private ushort? _port;
 
@@ -47,8 +46,11 @@ namespace StreamioX.App.Services
             if (infoHash == null)
                 throw new InvalidOperationException("This torrent source does not contain a valid BitTorrent info hash.");
 
-            var fileIndex = stream.FileIdx ?? 0;
-            if (fileIndex < 0)
+            // Stremio uses fileIdx=-1 when an add-on leaves file selection
+            // to the player. The native server resolves -1 to the best video
+            // file; defaulting to 0 can select a subtitle/sample/NFO file.
+            var fileIndex = stream.FileIdx ?? -1;
+            if (fileIndex < -1)
                 throw new InvalidOperationException("The torrent source contains an invalid file index.");
 
             await EnsureStartedAsync(cancellationToken).ConfigureAwait(false);
@@ -59,13 +61,12 @@ namespace StreamioX.App.Services
                 _port!.Value,
                 $"/stream/{infoHash}/{fileIndex}");
 
-            var magnet = stream.Url?.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase) == true
-                ? stream.Url
-                : "magnet:?xt=urn:btih:" + infoHash
-                    + string.Concat(trackers.Distinct(StringComparer.OrdinalIgnoreCase)
-                        .Select(tracker => "&tr=" + Uri.EscapeDataString(tracker)));
-
-            builder.Query = "magnet=" + Uri.EscapeDataString(magnet);
+            // The native stream route reads repeated tr= query parameters.
+            // A nested magnet= parameter is ignored by that route, so forward
+            // the add-on's tracker list using the server's actual contract.
+            builder.Query = string.Join("&", trackers
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(tracker => "tr=" + Uri.EscapeDataString(tracker)));
             return builder.Uri.AbsoluteUri;
         }
 
@@ -162,7 +163,7 @@ namespace StreamioX.App.Services
 
                 var appData = ApplicationData.Current;
                 var configFolder = await appData.LocalFolder.CreateFolderAsync(
-                    "TorrentBridge",
+                    "rqbit_dht",
                     CreationCollisionOption.OpenIfExists);
                 var cacheFolder = await appData.LocalCacheFolder.CreateFolderAsync(
                     "TorrentCache",
@@ -173,7 +174,7 @@ namespace StreamioX.App.Services
                     cancellationToken).ConfigureAwait(false);
 
                 if (result.Status != 0)
-                    throw new InvalidOperationException(ReadNativeError());
+                    throw new InvalidOperationException(NativeBridge.ReadLastError());
 
                 if (result.Port == 0)
                     throw new InvalidOperationException("Torrent engine started without returning a listening port.");
@@ -206,11 +207,11 @@ namespace StreamioX.App.Services
                 if (!_port.HasValue)
                     return;
 
-                var result = await Task.Run(NativeMethods.Stop).ConfigureAwait(false);
+                var result = await Task.Run(NativeBridge.Stop).ConfigureAwait(false);
                 _port = null;
 
                 if (result != 0)
-                    throw new InvalidOperationException(ReadNativeError());
+                    throw new InvalidOperationException(NativeBridge.ReadLastError());
             }
             finally
             {
@@ -227,36 +228,11 @@ namespace StreamioX.App.Services
             fixed (byte* configPointer = configBytes)
             fixed (byte* cachePointer = cacheBytes)
             {
-                var status = NativeMethods.Start(configPointer, cachePointer, 0, &port);
+                var status = NativeBridge.Start(configPointer, cachePointer, RequestedPort, &port);
                 return (status, port);
             }
         }
 
-        private static unsafe string ReadNativeError()
-        {
-            var buffer = new byte[2048];
-            fixed (byte* pointer = buffer)
-            {
-                NativeMethods.LastError(pointer, (nuint)buffer.Length);
-            }
 
-            var length = Array.IndexOf(buffer, (byte)0);
-            if (length < 0)
-                length = buffer.Length;
-
-            return Encoding.UTF8.GetString(buffer, 0, length);
-        }
-
-        private static unsafe partial class NativeMethods
-        {
-            [LibraryImport(NativeLibrary, EntryPoint = "streamio_torrent_bridge_start")]
-            internal static partial int Start(byte* configPath, byte* cachePath, ushort requestedPort, ushort* actualPort);
-
-            [LibraryImport(NativeLibrary, EntryPoint = "streamio_torrent_bridge_stop")]
-            internal static partial int Stop();
-
-            [LibraryImport(NativeLibrary, EntryPoint = "streamio_torrent_bridge_last_error")]
-            internal static partial nuint LastError(byte* buffer, nuint capacity);
-        }
     }
 }

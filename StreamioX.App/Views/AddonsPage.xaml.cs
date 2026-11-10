@@ -29,9 +29,9 @@ namespace StreamioX.App.Views
             await ViewModel.InstallAsync();
         }
 
-        private async void Refresh_Click(object sender, RoutedEventArgs e)
+        private async void SyncAll_Click(object sender, RoutedEventArgs e)
         {
-            await ViewModel.LoadAsync();
+            await ViewModel.SyncAllAsync();
         }
 
         private async void Remove_Click(object sender, RoutedEventArgs e)

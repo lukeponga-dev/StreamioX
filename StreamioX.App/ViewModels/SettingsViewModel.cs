@@ -60,6 +60,9 @@ namespace StreamioX.App.ViewModels
         private string? authStatusMessage;
 
         [ObservableProperty]
+        public partial string AddonSyncStatus { get; set; } = "Sign in to synchronize your Stremio add-ons across devices.";
+
+        [ObservableProperty]
         private bool isTorrentServerRunning;
 
         [ObservableProperty]
@@ -110,6 +113,7 @@ namespace StreamioX.App.ViewModels
             AccountLabel = IsLoggedIn
                 ? (_authService.User?.Email ?? "Signed in")
                 : "Not signed in";
+            AddonSyncStatus = _authService.LastAddonSyncMessage;
         }
 
         [RelayCommand]
@@ -210,6 +214,27 @@ namespace StreamioX.App.ViewModels
             catch (Exception ex)
             {
                 AuthStatusMessage = $"Auth key failed: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        private async Task SyncAccountAddonsAsync()
+        {
+            if (!_authService.IsLoggedIn)
+            {
+                AddonSyncStatus = "Sign in to Stremio before synchronizing account add-ons.";
+                return;
+            }
+
+            AddonSyncStatus = "Synchronizing your Stremio account add-ons…";
+            try
+            {
+                var result = await _authService.SyncAddonCollectionAsync();
+                AddonSyncStatus = result.Message;
+            }
+            catch (Exception ex)
+            {
+                AddonSyncStatus = $"Account add-on sync failed: {ex.Message}";
             }
         }
 

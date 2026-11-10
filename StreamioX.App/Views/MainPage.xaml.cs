@@ -17,6 +17,7 @@ namespace StreamioX.App.Views
             InitializeComponent();
             _navigationService = AppServices.GetRequiredService<INavigationService>();
             _navigationService.Initialize(ContentFrame);
+            ContentFrame.NavigationFailed += ContentFrame_NavigationFailed;
             ViewModel = AppServices.GetRequiredService<MainViewModel>();
             DataContext = ViewModel;
             Loaded += MainPage_Loaded;
@@ -29,6 +30,31 @@ namespace StreamioX.App.Views
             NavShell.SelectedItem = HomeNavItem;
             if (ContentFrame.Content == null) ViewModel.NavigateToHomeCommand.Execute(null);
             HomeNavItem.Focus(FocusState.Programmatic);
+        }
+
+        private void ContentFrame_NavigationFailed(object sender, Windows.UI.Xaml.Navigation.NavigationFailedEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[StreamioX] Page navigation failed: {e.SourcePageType?.FullName}: {e.Exception}");
+            ContentFrame.Content = new Grid
+            {
+                Background = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 5, 9, 12)),
+                Children =
+                {
+                    new StackPanel
+                    {
+                        Margin = new Thickness(36),
+                        Spacing = 12,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Children =
+                        {
+                            new TextBlock { Text = "This page couldn't be opened", FontSize = 26, FontWeight = Windows.UI.Text.FontWeights.SemiBold, Foreground = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Colors.White) },
+                            new TextBlock { Text = e.Exception?.Message ?? "Unknown navigation error", FontSize = 16, TextWrapping = TextWrapping.Wrap, Foreground = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 210, 220, 225)) },
+                            new TextBlock { Text = e.SourcePageType?.FullName ?? "Unknown page", FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 120, 140, 150)) }
+                        }
+                    }
+                }
+            };
+            e.Handled = true;
         }
 
         private void MainPage_Unloaded(object sender, RoutedEventArgs e)

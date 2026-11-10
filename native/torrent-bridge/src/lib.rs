@@ -181,8 +181,11 @@ pub unsafe extern "C" fn streamio_torrent_bridge_start(
                 Err(error) => { let _ = ready_tx.send(Err(format!("Tokio runtime: {error}"))); return; }
             };
             runtime.block_on(async move {
+                // config_dir is supplied by ApplicationData.Current.LocalFolder.
+                // librqbit writes its DHT routing table to this explicit AppContainer path.
+                let dht_config_path = config_dir.join("dht.json");
                 let (backend, restored): (LibrqbitBackend, std::collections::HashMap<String, LibrqbitHandle>) =
-                    match LibrqbitBackend::new(cache_dir.join("downloads")).await {
+                    match LibrqbitBackend::new(cache_dir.join("downloads"), dht_config_path).await {
                         Ok(value) => value,
                         Err(error) => { let _ = ready_tx.send(Err(format!("librqbit init: {error:#}"))); return; }
                     };

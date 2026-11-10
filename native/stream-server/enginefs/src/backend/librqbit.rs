@@ -16,13 +16,24 @@ pub struct LibrqbitBackend {
 }
 
 impl LibrqbitBackend {
-    pub async fn new(download_dir: PathBuf) -> Result<(Self, HashMap<String, LibrqbitHandle>)> {
+    pub async fn new(
+        download_dir: PathBuf,
+        dht_config_path: PathBuf,
+    ) -> Result<(Self, HashMap<String, LibrqbitHandle>)> {
         tokio::fs::create_dir_all(&download_dir).await?;
         debug!(path = ?download_dir, "Storing downloads");
 
         let session_opts = librqbit::SessionOptions {
             listen_port_range: Some(42000..42010),
             enable_upnp_port_forwarding: false,
+            // Persist the DHT routing table inside the app's LocalFolder-backed
+            // directory supplied by the native bridge. Never use OS/project defaults
+            // in the Xbox AppContainer.
+            disable_dht_persistence: false,
+            dht_config: Some(librqbit::dht::PersistentDhtConfig {
+                dump_interval: Some(Duration::from_secs(60)),
+                config_filename: Some(dht_config_path),
+            }),
             persistence: Some(librqbit::SessionPersistenceConfig::Json {
                 folder: Some(download_dir.clone()),
             }),

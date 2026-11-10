@@ -215,37 +215,47 @@ fn playback_intent_for_request(
 }
 
 fn content_type_for_name(name: &str) -> &'static str {
-    if name.ends_with(".mp4") {
+    // Torrent filenames are supplied by remote metadata and commonly use
+    // uppercase or mixed-case extensions. Keep MIME detection case-insensitive
+    // so the Xbox media stack does not receive application/octet-stream for
+    // otherwise supported containers such as "Movie.MP4".
+    let extension = name.rsplit_once('.').map(|(_, ext)| ext);
+
+    if extension
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("m4v"))
+    {
         "video/mp4"
-    } else if name.ends_with(".mkv") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("mkv")) {
         "video/x-matroska"
-    } else if name.ends_with(".ts") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("ts")) {
         "video/mp2t"
-    } else if name.ends_with(".avi") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("avi")) {
         "video/x-msvideo"
-    } else if name.ends_with(".mov") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("mov")) {
         "video/quicktime"
-    } else if name.ends_with(".wmv") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("wmv")) {
         "video/x-ms-wmv"
-    } else if name.ends_with(".webm") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("webm")) {
         "video/webm"
-    } else if name.ends_with(".mp3") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("mp3")) {
         "audio/mpeg"
-    } else if name.ends_with(".m4a") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("m4a")) {
         "audio/mp4"
-    } else if name.ends_with(".aac") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("aac")) {
         "audio/aac"
-    } else if name.ends_with(".flac") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("flac")) {
         "audio/flac"
-    } else if name.ends_with(".wav") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("wav")) {
         "audio/wav"
-    } else if name.ends_with(".ogg") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("ogg")) {
         "audio/ogg"
-    } else if name.ends_with(".opus") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("opus")) {
         "audio/opus"
-    } else if name.ends_with(".ac3") {
+    } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("ac3")) {
         "audio/ac3"
-    } else if name.ends_with(".eac3") || name.ends_with(".ec3") {
+    } else if extension
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("eac3") || ext.eq_ignore_ascii_case("ec3"))
+    {
         "audio/eac3"
     } else {
         "application/octet-stream"
@@ -988,6 +998,17 @@ mod tests {
             assert_eq!(active_readers.load(Ordering::SeqCst), 1);
         }
         assert_eq!(active_readers.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn detects_media_types_for_mixed_case_file_extensions() {
+        assert_eq!(content_type_for_name("Movie.MP4"), "video/mp4");
+        assert_eq!(content_type_for_name("episode.MkV"), "video/x-matroska");
+        assert_eq!(content_type_for_name("clip.m4v"), "video/mp4");
+        assert_eq!(
+            content_type_for_name("unknown.bin"),
+            "application/octet-stream"
+        );
     }
 
     #[test]

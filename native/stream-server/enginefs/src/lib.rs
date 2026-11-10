@@ -1422,7 +1422,9 @@ impl BackendEngineFS<LibrqbitBackend> {
         _cache_config: EngineCacheConfig,
     ) -> Result<Self> {
         let download_dir = root_dir.join("rqbit-downloads");
-        let (backend, restored) = LibrqbitBackend::new(download_dir.clone()).await?;
+        let dht_config_path = root_dir.join("rqbit_dht.json");
+        let (backend, restored) =
+            LibrqbitBackend::new(download_dir.clone(), dht_config_path).await?;
         Ok(Self::new_with_backend(
             backend,
             restored,

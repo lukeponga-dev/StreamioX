@@ -9,6 +9,7 @@ namespace StreamioX.App.Services
         bool IsLoggedIn { get; }
         string? AuthKey { get; }
         StremioUser? User { get; }
+        string LastAddonSyncMessage { get; }
 
         Task InitializeAsync();
         Task<DeviceLinkSession> StartDeviceLinkAsync(CancellationToken cancellationToken = default);
@@ -17,5 +18,6 @@ namespace StreamioX.App.Services
         Task LoginWithAuthKeyAsync(string authKey, CancellationToken cancellationToken = default);
         Task LogoutAsync(CancellationToken cancellationToken = default);
         Task RefreshUserAsync(CancellationToken cancellationToken = default);
+        Task<AddonAccountSyncResult> SyncAddonCollectionAsync(CancellationToken cancellationToken = default);
     }
 }

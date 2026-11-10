@@ -17,6 +17,7 @@ namespace StreamioX.App.Models
         [JsonPropertyName("resources")] public List<JsonElement>? Resources { get; set; }
         [JsonPropertyName("catalogs")] public List<CatalogDescriptor>? Catalogs { get; set; }
         [JsonPropertyName("idPrefixes")] public List<string>? IdPrefixes { get; set; }
+        [JsonExtensionData] public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
 
         public IReadOnlyList<string> GetResourceNames()
         {
@@ -50,6 +51,7 @@ namespace StreamioX.App.Models
         [JsonPropertyName("id")] public string? Id { get; set; }
         [JsonPropertyName("name")] public string? Name { get; set; }
         [JsonPropertyName("extra")] public List<CatalogExtra>? Extra { get; set; }
+        [JsonExtensionData] public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
     }
 
     public sealed class CatalogExtra
@@ -57,6 +59,7 @@ namespace StreamioX.App.Models
         [JsonPropertyName("name")] public string? Name { get; set; }
         [JsonPropertyName("isRequired")] public bool IsRequired { get; set; }
         [JsonPropertyName("options")] public List<string>? Options { get; set; }
+        [JsonExtensionData] public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
     }
 
     public sealed class InstalledAddon
@@ -72,6 +75,13 @@ namespace StreamioX.App.Models
         public List<string> Resources { get; set; } = new();
         public List<CatalogDescriptor> Catalogs { get; set; } = new();
         public List<string> IdPrefixes { get; set; } = new();
+        public List<JsonElement> ManifestResources { get; set; } = new();
+        public Dictionary<string, JsonElement> ManifestAdditionalProperties { get; set; } = new();
         public bool IsOfficial { get; set; }
+        public string SyncState { get; set; } = "Pending";
+        public string? LastSyncError { get; set; }
+        public DateTimeOffset? LastSyncedAt { get; set; }
+        [JsonIgnore] public string LastSyncedDisplay => LastSyncedAt?.ToLocalTime().ToString("g") ?? "Not synced yet";
+        [JsonIgnore] public string ResourcesDisplay => string.Join(" · ", Resources);
     }
 }

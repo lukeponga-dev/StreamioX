@@ -18,8 +18,9 @@
   <ItemGroup>
     <Folder Include="Converters\" />
   </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' == 'x64' and Exists('$(MSBuildProjectDirectory)\..\native\torrent-bridge\target\x86_64-uwp-windows-msvc\release\streamio_torrent_bridge.dll')">
-    <Content Include="..\native\torrent-bridge\target\x86_64-uwp-windows-msvc\release\streamio_torrent_bridge.dll" Link="streamio_torrent_bridge.dll" CopyToOutputDirectory="PreserveNewest" />
+  <ItemGroup Condition="'$(Platform)' == 'x64'">
+    <!-- Include the native bridge even on a clean checkout; BuildTorrentBridge creates it before content is copied. -->
+    <Content Include="..\native\torrent-bridge\target\x86_64-uwp-windows-msvc\release\streamio_torrent_bridge.dll" Link="streamio_torrent_bridge.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="BuildTorrentBridge" BeforeTargets="PrepareForBuild" Condition="'$(Platform)' == 'x64' and '$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true' and '$(BuildTorrentBridge)' != 'false'">
@@ -31,5 +32,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0-rc.3.26522.148" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="11.0.0-rc.3.26522.148" />
     <PackageReference Include="Microsoft.UI.Xaml" Version="2.8.7" />
+    <PackageReference Include="FFmpegInteropX.UWP" Version="2.1.0.81200" />
   </ItemGroup>
 </Project>

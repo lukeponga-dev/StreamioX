@@ -13,21 +13,19 @@ namespace StreamioX.App.ViewModels
         private readonly IAddonService _addonService;
 
         [ObservableProperty]
-        private ObservableCollection<InstalledAddon> addons = new();
+        public partial ObservableCollection<InstalledAddon> Addons { get; set; } = new();
 
         [ObservableProperty]
-        private string? manifestUrlInput;
+        public partial string? ManifestUrlInput { get; set; }
 
         [ObservableProperty]
-        private bool isBusy;
+        public partial bool IsBusy { get; set; }
 
         [ObservableProperty]
-        private string? statusMessage;
+        public partial string? StatusMessage { get; set; }
 
-        public AddonsViewModel(IAddonService addonService)
-        {
+        public AddonsViewModel(IAddonService addonService) =>
             _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
-        }
 
         [RelayCommand]
         public async Task LoadAsync()
@@ -38,15 +36,10 @@ namespace StreamioX.App.ViewModels
             {
                 await _addonService.InitializeAsync();
                 RefreshList();
+                StatusMessage = "Installed add-ons are ready. Use Sync all to refresh their manifests.";
             }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Load failed: {ex.Message}";
-            }
-            finally
-            {
-                IsBusy = false;
-            }
+            catch (Exception ex) { StatusMessage = $"Load failed: {ex.Message}"; }
+            finally { IsBusy = false; }
         }
 
         [RelayCommand]
@@ -54,7 +47,7 @@ namespace StreamioX.App.ViewModels
         {
             if (string.IsNullOrWhiteSpace(ManifestUrlInput))
             {
-                StatusMessage = "Enter an addon manifest URL.";
+                StatusMessage = "Enter an add-on manifest URL.";
                 return;
             }
 
@@ -63,37 +56,40 @@ namespace StreamioX.App.ViewModels
             try
             {
                 var addon = await _addonService.InstallFromManifestUrlAsync(ManifestUrlInput.Trim());
-                if (addon == null)
-                {
-                    StatusMessage = "Could not install addon. Check the URL.";
-                }
+                if (addon == null) StatusMessage = "The add-on server returned no manifest.";
                 else
                 {
-                    StatusMessage = $"Installed: {addon.Name}";
+                    StatusMessage = $"Installed and synchronized: {addon.Name}";
                     ManifestUrlInput = string.Empty;
                     RefreshList();
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) { StatusMessage = $"Install failed: {ex.Message}"; }
+            finally { IsBusy = false; }
+        }
+
+        [RelayCommand]
+        public async Task SyncAllAsync()
+        {
+            IsBusy = true;
+            StatusMessage = "Synchronizing installed add-ons…";
+            try
             {
-                StatusMessage = $"Install failed: {ex.Message}";
+                await _addonService.InitializeAsync();
+                var result = await _addonService.SyncAllAsync();
+                RefreshList();
+                StatusMessage = result.Failed == 0
+                    ? $"Sync complete: {result.Succeeded} add-on(s) updated."
+                    : $"Sync complete: {result.Succeeded} updated, {result.Failed} failed. {string.Join(" | ", result.Errors)}";
             }
-            finally
-            {
-                IsBusy = false;
-            }
+            catch (Exception ex) { StatusMessage = $"Sync failed: {ex.Message}"; }
+            finally { IsBusy = false; }
         }
 
         [RelayCommand]
         public async Task UninstallAsync(InstalledAddon? addon)
         {
             if (addon == null) return;
-            if (addon.IsOfficial)
-            {
-                StatusMessage = "Cannot remove the official Cinemeta addon.";
-                return;
-            }
-
             IsBusy = true;
             try
             {
@@ -101,21 +97,15 @@ namespace StreamioX.App.ViewModels
                 StatusMessage = $"Removed: {addon.Name}";
                 RefreshList();
             }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Remove failed: {ex.Message}";
-            }
-            finally
-            {
-                IsBusy = false;
-            }
+            catch (Exception ex) { StatusMessage = $"Remove failed: {ex.Message}"; }
+            finally { IsBusy = false; }
         }
 
         private void RefreshList()
         {
             Addons.Clear();
-            foreach (var a in _addonService.InstalledAddons)
-                Addons.Add(a);
+            foreach (var addon in _addonService.InstalledAddons)
+                Addons.Add(addon);
         }
     }
 }

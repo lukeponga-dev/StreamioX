@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,265 +13,275 @@ namespace StreamioX.App.Services
     public sealed class AddonService : IAddonService
     {
         public const string OfficialCinemetaManifestUrl = "https://v3-cinemeta.strem.io/manifest.json";
-
-        private static readonly JsonSerializerOptions StorageJson = new()
-        {
-            PropertyNameCaseInsensitive = true,
-            WriteIndented = false,
-            TypeInfoResolver = StremioJsonContext.Default
-        };
-
+        private const string AddonStorageFileName = "installed-addons.json";
         private readonly StremioClient _client;
         private readonly List<InstalledAddon> _addons = new();
-        private bool _initialized;
         private readonly SemaphoreSlim _initializeLock = new(1, 1);
+        private readonly SemaphoreSlim _mutationLock = new(1, 1);
+        private bool _initialized;
 
-        public IReadOnlyList<InstalledAddon> InstalledAddons => _addons;
+        public IReadOnlyList<InstalledAddon> InstalledAddons => _addons.ToList();
 
-        public AddonService(StremioClient client)
-        {
+        public AddonService(StremioClient client) =>
             _client = client ?? throw new ArgumentNullException(nameof(client));
-        }
 
         public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
-            // App startup and page navigation can request initialization at the same time.
-            // Serialize initialization so the installed add-on list is never cleared or
-            // modified while a catalog request is enumerating it.
             await _initializeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 if (_initialized) return;
 
                 _addons.Clear();
-                var stored = LoadFromSettings();
-                if (stored.Count > 0)
+                _addons.AddRange(LoadFromStorage());
+
+                if (!_addons.Any(a => a.IsOfficial ||
+                    a.ManifestUrl.Contains("v3-cinemeta.strem.io", StringComparison.OrdinalIgnoreCase)))
                 {
-                    _addons.AddRange(stored);
-                }
-                else
-                {
-                    // First run: install official Cinemeta
-                    var cinemeta = await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken)
-                        .ConfigureAwait(false);
-                    if (cinemeta != null)
-                        cinemeta.IsOfficial = true;
+                    // First launch: make a best-effort install of Cinemeta. Network failures
+                    // do not block the app from opening; the Add-ons page can retry.
+                    try { await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { throw; }
+                    catch { }
                 }
 
-                // Ensure Cinemeta is present and refresh its manifest on each app start.
-                // Stored manifests can become stale and no longer describe valid catalogs.
-                var refreshedCinemeta = await InstallFromManifestUrlAsync(OfficialCinemetaManifestUrl, cancellationToken)
-                    .ConfigureAwait(false);
-                if (refreshedCinemeta != null)
-                    refreshedCinemeta.IsOfficial = true;
+                foreach (var addon in _addons)
+                {
+                    if (addon.ManifestUrl.Contains("v3-cinemeta.strem.io", StringComparison.OrdinalIgnoreCase))
+                        addon.IsOfficial = true;
+                }
 
                 _initialized = true;
+                SaveToStorage();
             }
-            finally
-            {
-                _initializeLock.Release();
-            }
+            finally { _initializeLock.Release(); }
+
+            // Refresh every installed manifest at startup. Each failure is isolated and
+            // the last-known-good manifest remains usable offline.
+            await SyncAllAsync(cancellationToken).ConfigureAwait(false);
         }
 
         public async Task<InstalledAddon?> InstallFromManifestUrlAsync(
-            string manifestUrl,
-            CancellationToken cancellationToken = default)
+            string manifestUrl, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(manifestUrl))
-                return null;
-
-            manifestUrl = NormalizeManifestUrl(manifestUrl);
-
-            var manifest = await _client.GetFromJsonAsync<AddonManifest>(manifestUrl, cancellationToken)
+            var normalizedUrl = NormalizeManifestUrl(manifestUrl);
+            var manifest = await _client.GetFromJsonAsync<AddonManifest>(normalizedUrl, cancellationToken)
                 .ConfigureAwait(false);
+            ValidateManifest(manifest);
 
-            if (manifest == null || string.IsNullOrWhiteSpace(manifest.Id))
-                return null;
-
-            // Already installed?
-            var existing = _addons.FirstOrDefault(a =>
-                string.Equals(a.Id, manifest.Id, StringComparison.OrdinalIgnoreCase));
-            if (existing != null)
+            await _mutationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                // Refresh cached manifest metadata so changed catalog IDs/resources do not
-                // leave the app with a stale provider definition.
-                existing.ManifestUrl = manifestUrl;
-                existing.BaseUrl = GetBaseUrl(manifestUrl);
-                existing.Name = manifest.Name ?? manifest.Id!;
-                existing.Description = manifest.Description;
-                existing.Version = manifest.Version;
-                existing.Logo = manifest.Logo;
-                existing.Types = manifest.Types?.ToList() ?? new List<string>();
-                existing.Resources = manifest.GetResourceNames().ToList();
-                existing.Catalogs = manifest.Catalogs?.ToList() ?? new List<CatalogDescriptor>();
-                existing.IdPrefixes = manifest.IdPrefixes?.ToList() ?? new List<string>();
-                existing.IsOfficial = manifestUrl.Contains("cinemeta", StringComparison.OrdinalIgnoreCase);
-                SaveToSettings();
-                return existing;
+                var existing = _addons.FirstOrDefault(a =>
+                    string.Equals(a.Id, manifest!.Id, StringComparison.OrdinalIgnoreCase));
+                var addon = existing ?? new InstalledAddon();
+                ApplyManifest(addon, manifest!, normalizedUrl);
+                addon.LastSyncedAt = DateTimeOffset.UtcNow;
+                addon.LastSyncError = null;
+                addon.SyncState = "Synced";
+                if (existing == null) _addons.Add(addon);
+                SaveToStorage();
+                return addon;
             }
+            finally { _mutationLock.Release(); }
+        }
 
-            var baseUrl = GetBaseUrl(manifestUrl);
-            var addon = new InstalledAddon
+        public async Task<AddonSyncSummary> SyncAllAsync(CancellationToken cancellationToken = default)
+        {
+            var summary = new AddonSyncSummary();
+            var snapshot = _addons.ToList();
+            foreach (var addon in snapshot)
             {
-                ManifestUrl = manifestUrl,
-                BaseUrl = baseUrl,
-                Id = manifest.Id!,
-                Name = manifest.Name ?? manifest.Id!,
-                Description = manifest.Description,
-                Version = manifest.Version,
-                Logo = manifest.Logo,
-                Types = manifest.Types?.ToList() ?? new List<string>(),
-                Resources = manifest.GetResourceNames().ToList(),
-                Catalogs = manifest.Catalogs?.ToList() ?? new List<CatalogDescriptor>(),
-                IdPrefixes = manifest.IdPrefixes?.ToList() ?? new List<string>(),
-                IsOfficial = manifestUrl.Contains("cinemeta", StringComparison.OrdinalIgnoreCase)
-            };
-
-            _addons.Add(addon);
-            SaveToSettings();
-            return addon;
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    var refreshed = await _client.GetFromJsonAsync<AddonManifest>(addon.ManifestUrl, cancellationToken)
+                        .ConfigureAwait(false);
+                    ValidateManifest(refreshed);
+                    await _mutationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        // A manifest ID can change upstream; retain the installed identity
+                        // while updating the descriptor only if it still matches.
+                        if (!string.Equals(refreshed!.Id, addon.Id, StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidDataException("The manifest ID changed. Remove and reinstall this add-on.");
+                        ApplyManifest(addon, refreshed, addon.ManifestUrl);
+                        addon.LastSyncedAt = DateTimeOffset.UtcNow;
+                        addon.LastSyncError = null;
+                        addon.SyncState = "Synced";
+                        SaveToStorage();
+                    }
+                    finally { _mutationLock.Release(); }
+                    summary.Succeeded++;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    await _mutationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        addon.SyncState = "Error";
+                        addon.LastSyncError = ex.Message;
+                        SaveToStorage();
+                    }
+                    finally { _mutationLock.Release(); }
+                    summary.Failed++;
+                    summary.Errors.Add(addon.Name + ": " + ex.Message);
+                }
+            }
+            return summary;
         }
 
-        public Task UninstallAsync(string addonId)
+        public async Task UninstallAsync(string addonId)
         {
-            var item = _addons.FirstOrDefault(a =>
-                string.Equals(a.Id, addonId, StringComparison.OrdinalIgnoreCase));
-            if (item == null)
-                return Task.CompletedTask;
-
-            // Keep at least one catalog provider
-            if (item.IsOfficial && _addons.Count(a => a.Resources.Contains("catalog", StringComparer.OrdinalIgnoreCase)) <= 1)
-                return Task.CompletedTask;
-
-            _addons.Remove(item);
-            SaveToSettings();
-            return Task.CompletedTask;
+            await _mutationLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var item = _addons.FirstOrDefault(a =>
+                    string.Equals(a.Id, addonId, StringComparison.OrdinalIgnoreCase));
+                if (item == null) return;
+                if (item.IsOfficial)
+                    throw new InvalidOperationException("The official Cinemeta add-on cannot be removed.");
+                _addons.Remove(item);
+                SaveToStorage();
+            }
+            finally { _mutationLock.Release(); }
         }
 
-        public IReadOnlyList<InstalledAddon> GetCatalogProviders(string? type = null)
-        {
-            return _addons
-                .Where(a => a.Resources.Any(r => string.Equals(r, "catalog", StringComparison.OrdinalIgnoreCase)))
-                .Where(a => type == null
-                            || a.Types.Count == 0
-                            || a.Types.Any(t => string.Equals(t, type, StringComparison.OrdinalIgnoreCase))
-                            || a.Catalogs.Any(c => string.Equals(c.Type, type, StringComparison.OrdinalIgnoreCase)))
+        public IReadOnlyList<InstalledAddon> GetCatalogProviders(string? type = null) =>
+            _addons.ToList().Where(a => HasResource(a, "catalog"))
+                .Where(a => SupportsType(a, type))
                 .ToList();
+
+        public IReadOnlyList<InstalledAddon> GetMetaProviders(string? type = null, string? contentId = null) =>
+            _addons.ToList().Where(a => HasResource(a, "meta"))
+                .Where(a => SupportsType(a, type))
+                .Where(a => SupportsId(a, contentId))
+                .ToList();
+
+        public IReadOnlyList<InstalledAddon> GetStreamProviders(string? type = null, string? contentId = null) =>
+            _addons.ToList().Where(a => HasResource(a, "stream"))
+                .Where(a => SupportsType(a, type))
+                .Where(a => SupportsId(a, contentId))
+                .ToList();
+
+        private static bool HasResource(InstalledAddon addon, string name) =>
+            addon.Resources.Any(r => string.Equals(r, name, StringComparison.OrdinalIgnoreCase));
+
+        private static bool SupportsType(InstalledAddon addon, string? type) =>
+            type == null || (addon.Types.Count == 0 && addon.Catalogs.Count == 0) ||
+            addon.Types.Any(t => string.Equals(t, type, StringComparison.OrdinalIgnoreCase)) ||
+            addon.Catalogs.Any(c => string.Equals(c.Type, type, StringComparison.OrdinalIgnoreCase));
+
+        private static bool SupportsId(InstalledAddon addon, string? contentId) =>
+            contentId == null || addon.IdPrefixes.Count == 0 ||
+            addon.IdPrefixes.Any(p => contentId.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+        private static void ValidateManifest(AddonManifest? manifest)
+        {
+            if (manifest == null) throw new InvalidDataException("The server returned an empty manifest.");
+            if (string.IsNullOrWhiteSpace(manifest.Id)) throw new InvalidDataException("Manifest is missing its add-on ID.");
+            if (manifest.Id.Length > 256) throw new InvalidDataException("Manifest add-on ID is too long.");
+            if (string.IsNullOrWhiteSpace(manifest.Name)) throw new InvalidDataException("Manifest is missing its add-on name.");
+            if (manifest.GetResourceNames().Count == 0) throw new InvalidDataException("Manifest does not declare any supported resources.");
+            if (manifest.Types?.Any(string.IsNullOrWhiteSpace) == true) throw new InvalidDataException("Manifest contains an invalid content type.");
         }
 
-        public IReadOnlyList<InstalledAddon> GetMetaProviders(string? type = null, string? contentId = null)
+        private static void ApplyManifest(InstalledAddon addon, AddonManifest manifest, string manifestUrl)
         {
-            return _addons
-                .Where(a => a.Resources.Any(r => string.Equals(r, "meta", StringComparison.OrdinalIgnoreCase)))
-                .Where(a => type == null
-                            || a.Types.Count == 0
-                            || a.Types.Any(t => string.Equals(t, type, StringComparison.OrdinalIgnoreCase)))
-                .Where(a => contentId == null
-                            || a.IdPrefixes.Count == 0
-                            || a.IdPrefixes.Any(p => contentId.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-        }
-
-        public IReadOnlyList<InstalledAddon> GetStreamProviders(string? type = null, string? contentId = null)
-        {
-            return _addons
-                .Where(a => a.Resources.Any(r => string.Equals(r, "stream", StringComparison.OrdinalIgnoreCase)))
-                .Where(a => type == null
-                            || a.Types.Count == 0
-                            || a.Types.Any(t => string.Equals(t, type, StringComparison.OrdinalIgnoreCase)))
-                .Where(a => contentId == null
-                            || a.IdPrefixes.Count == 0
-                            || a.IdPrefixes.Any(p => contentId.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
+            addon.ManifestUrl = manifestUrl;
+            addon.BaseUrl = GetBaseUrl(manifestUrl);
+            addon.Id = manifest.Id!;
+            addon.Name = manifest.Name ?? manifest.Id!;
+            addon.Description = manifest.Description;
+            addon.Version = manifest.Version;
+            addon.Logo = manifest.Logo;
+            addon.Types = manifest.Types?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? new();
+            addon.Resources = manifest.GetResourceNames().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            addon.ManifestResources = manifest.Resources?.Select(resource => resource.Clone()).ToList() ?? new();
+            addon.ManifestAdditionalProperties = manifest.AdditionalProperties?.ToDictionary(pair => pair.Key, pair => pair.Value.Clone()) ?? new();
+            addon.Catalogs = manifest.Catalogs?.Where(c => !string.IsNullOrWhiteSpace(c.Type) && !string.IsNullOrWhiteSpace(c.Id)).ToList() ?? new();
+            addon.IdPrefixes = manifest.IdPrefixes?.Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? new();
+            addon.IsOfficial = manifestUrl.Contains("v3-cinemeta.strem.io", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string NormalizeManifestUrl(string url)
         {
+            if (string.IsNullOrWhiteSpace(url))
+                throw new ArgumentException("Enter an add-on manifest URL.", nameof(url));
+
             url = url.Trim();
             if (url.StartsWith("stremio://", StringComparison.OrdinalIgnoreCase))
                 url = "https://" + url.Substring("stremio://".Length);
 
-            if (!url.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase)
-                && !url.EndsWith("/"))
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+                throw new ArgumentException("Add-on URLs must use HTTP or HTTPS.", nameof(url));
+
+            if (!uri.AbsolutePath.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase))
             {
-                // allow bare base
+                var builder = new UriBuilder(uri)
+                {
+                    Path = uri.AbsolutePath.TrimEnd('/') + "/manifest.json"
+                };
+                uri = builder.Uri;
             }
 
-            if (!url.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase))
-            {
-                url = url.TrimEnd('/') + "/manifest.json";
-            }
-
-            return url;
+            return uri.AbsoluteUri;
         }
 
         private static string GetBaseUrl(string manifestUrl)
         {
             var idx = manifestUrl.LastIndexOf("/manifest.json", StringComparison.OrdinalIgnoreCase);
-            if (idx > 0)
-                return manifestUrl.Substring(0, idx);
-            return manifestUrl.TrimEnd('/');
+            return idx > 0 ? manifestUrl.Substring(0, idx) : manifestUrl.TrimEnd('/');
         }
 
-        private const string AddonStorageFileName = "installed-addons.json";
+        private static string StoragePath =>
+            Path.Combine(ApplicationData.Current.LocalFolder.Path, AddonStorageFileName);
 
-        private List<InstalledAddon> LoadFromSettings()
+        private List<InstalledAddon> LoadFromStorage()
         {
-            var typeInfo = (System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<InstalledAddon>>)
-                StremioJsonContext.Default.GetTypeInfo(typeof(List<InstalledAddon>));
-
             try
             {
-                // Add-on manifests can make this collection larger than the WinRT
-                // LocalSettings value limit. Keep the JSON in LocalFolder instead.
-                var filePath = Path.Combine(ApplicationData.Current.LocalFolder.Path, AddonStorageFileName);
-                if (File.Exists(filePath))
+                if (File.Exists(StoragePath))
                 {
-                    var fileJson = File.ReadAllText(filePath);
-                    if (!string.IsNullOrWhiteSpace(fileJson))
-                    {
-                        return JsonSerializer.Deserialize(fileJson, typeInfo) ?? new List<InstalledAddon>();
-                    }
+                    var json = File.ReadAllText(StoragePath);
+                    var loaded = JsonSerializer.Deserialize(json, StremioJsonContext.Default.ListInstalledAddon);
+                    if (loaded != null) return loaded;
                 }
-
-                // One-time migration from the old LocalSettings string, if present.
-                var local = ApplicationData.Current.LocalSettings;
-                if (local.Values.TryGetValue("InstalledAddons", out var raw)
-                    && raw is string legacyJson
-                    && !string.IsNullOrWhiteSpace(legacyJson))
+                // Migrate older LocalSettings installations once.
+                var values = ApplicationData.Current.LocalSettings.Values;
+                if (values.TryGetValue("InstalledAddons", out var raw) && raw is string legacy && !string.IsNullOrWhiteSpace(legacy))
                 {
-                    var migrated = JsonSerializer.Deserialize(legacyJson, typeInfo) ?? new List<InstalledAddon>();
-                    if (migrated.Count > 0)
-                    {
-                        var migratedJson = JsonSerializer.Serialize(migrated, typeInfo);
-                        File.WriteAllText(filePath, migratedJson);
-                    }
-
+                    var migrated = JsonSerializer.Deserialize(legacy, StremioJsonContext.Default.ListInstalledAddon) ?? new();
+                    SaveToStorage(migrated);
                     return migrated;
                 }
             }
-            catch (Exception)
-            {
-                // A corrupt or inaccessible cache should not prevent the app from starting.
-            }
-
+            catch { /* Corrupt local cache must not prevent startup. */ }
             return new List<InstalledAddon>();
         }
 
-        private void SaveToSettings()
+        private void SaveToStorage() => SaveToStorage(_addons);
+
+        private static void SaveToStorage(List<InstalledAddon> addons)
         {
             try
             {
-                var typeInfo = (System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<InstalledAddon>>)
-                    StremioJsonContext.Default.GetTypeInfo(typeof(List<InstalledAddon>));
-                var json = JsonSerializer.Serialize(_addons, typeInfo);
-                var filePath = Path.Combine(ApplicationData.Current.LocalFolder.Path, AddonStorageFileName);
-                File.WriteAllText(filePath, json);
+                var json = JsonSerializer.Serialize(addons, StremioJsonContext.Default.ListInstalledAddon);
+                var tempPath = StoragePath + ".tmp";
+                File.WriteAllText(tempPath, json);
+                if (File.Exists(StoragePath)) File.Delete(StoragePath);
+                File.Move(tempPath, StoragePath);
             }
-            catch (Exception)
-            {
-                // Keep the in-memory add-on list usable if local persistence is unavailable.
-            }
+            catch { /* Keep current in-memory state if storage is temporarily unavailable. */ }
         }
+    }
+
+    public sealed class AddonSyncSummary
+    {
+        public int Succeeded { get; set; }
+        public int Failed { get; set; }
+        public List<string> Errors { get; } = new();
     }
 }

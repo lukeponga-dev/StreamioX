@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Specialized;
 using StreamioX.App.Models;
+using StreamioX.App.Helpers;
 using StreamioX.App.ViewModels;
 using Windows.UI;
 using Windows.UI.Xaml;
@@ -14,10 +15,12 @@ namespace StreamioX.App.Views
     public sealed partial class DetailsPage : Page
     {
         public DetailsViewModel ViewModel { get; }
+        private bool _movieStreamFocusApplied;
 
         public DetailsPage()
         {
             InitializeComponent();
+            FocusHelper.AttachXboxFocus(LibraryButton);
             ViewModel = AppServices.GetRequiredService<DetailsViewModel>();
             DataContext = ViewModel;
             ViewModel.Episodes.CollectionChanged += ContentRows_CollectionChanged;
@@ -31,39 +34,8 @@ namespace StreamioX.App.Views
 
         private void RenderContentRows()
         {
-            EpisodesRow.Children.Clear();
-            EpisodesSection.Visibility = ViewModel.Episodes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-            foreach (var episode in ViewModel.Episodes)
-            {
-                var title = string.IsNullOrWhiteSpace(episode.Title) ? "Episode" : episode.Title;
-                if (episode.Season.HasValue || episode.Episode.HasValue)
-                    title = $"S{episode.Season ?? 1:00} E{episode.Episode ?? 0:00}  ·  {title}";
-
-                var content = new StackPanel { Spacing = 4 };
-                content.Children.Add(new TextBlock
-                {
-                    Text = title, Foreground = new SolidColorBrush(Colors.White),
-                    FontSize = 16, FontWeight = Windows.UI.Text.FontWeights.SemiBold
-                });
-                if (!string.IsNullOrWhiteSpace(episode.Overview))
-                    content.Children.Add(new TextBlock
-                    {
-                        Text = episode.Overview, Foreground = new SolidColorBrush(Color.FromArgb(255, 185, 194, 201)),
-                        FontSize = 13, TextWrapping = TextWrapping.Wrap, MaxHeight = 48
-                    });
-                var button = new Button
-                {
-                    Content = content, Tag = episode, HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(16, 12, 16, 12),
-                    Background = new SolidColorBrush(Color.FromArgb(255, 22, 27, 37)),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(255, 57, 69, 83)),
-                    BorderThickness = new Thickness(1), Margin = new Thickness(0, 2, 0, 2),
-                    UseSystemFocusVisuals = true
-                };
-                button.Click += EpisodeButton_Click;
-                EpisodesRow.Children.Add(button);
-            }
-
+            // Episodes are rendered by the horizontal ItemsRepeater bound to
+            // ViewModel.Episodes; only stream options need imperative construction.
             StreamsRow.Children.Clear();
             foreach (var stream in ViewModel.Streams)
             {
@@ -92,11 +64,21 @@ namespace StreamioX.App.Views
                     Background = new SolidColorBrush(Color.FromArgb(255, 22, 27, 37)),
                     BorderBrush = new SolidColorBrush(Color.FromArgb(255, 57, 69, 83)),
                     BorderThickness = new Thickness(1), Margin = new Thickness(0, 2, 0, 2),
-                    UseSystemFocusVisuals = true
+                    UseSystemFocusVisuals = true,
+                    Style = Application.Current.Resources["XboxFocusCardStyle"] as Style
                 };
+                FocusHelper.AttachXboxFocus(button);
                 button.GotFocus += StreamButton_GotFocus;
                 button.Click += StreamButton_Click;
                 StreamsRow.Children.Add(button);
+            }
+
+            // Movie pages have no episode rail, so move controller focus directly
+            // to the first playable source as soon as stream results arrive.
+            if (!ViewModel.IsSeries && !_movieStreamFocusApplied && StreamsRow.Children.Count > 0)
+            {
+                _movieStreamFocusApplied = true;
+                (StreamsRow.Children[0] as Control)?.Focus(Windows.UI.Xaml.FocusState.Programmatic);
             }
         }
 
@@ -128,10 +110,12 @@ namespace StreamioX.App.Views
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            _movieStreamFocusApplied = false;
 
             if (e.Parameter is Movie selectedMovie)
             {
                 await ViewModel.InitializeAsync(selectedMovie);
+                RenderContentRows();
                 PosterImage.Source = null;
                 if (!string.IsNullOrWhiteSpace(ViewModel.PosterUrl) &&
                     Uri.TryCreate(ViewModel.PosterUrl, UriKind.Absolute, out var posterUri))

@@ -5,60 +5,122 @@
     Background="Transparent"
     XYFocusKeyboardNavigation="Enabled">
     <Page.Resources>
-        <SolidColorBrush x:Key="CardSurface" Color="#10151B"/>
-        <SolidColorBrush x:Key="CardBorder" Color="#26333B"/>
-        <SolidColorBrush x:Key="GreenAccent" Color="#20E66B"/>
-        <DataTemplate x:Key="PosterTemplate">
-            <Button Click="Poster_Click" Tag="{Binding}" Padding="0" Margin="0,0,12,0"
-                    Background="{StaticResource CardSurface}" BorderBrush="{StaticResource CardBorder}"
-                    BorderThickness="1" UseSystemFocusVisuals="True"
-                    XYFocusKeyboardNavigation="Enabled">
-                <Grid Width="132" Height="190" RenderTransformOrigin="0.5,0.5">
-                    <Grid.RenderTransform><ScaleTransform x:Name="PosterScale" ScaleX="1" ScaleY="1"/></Grid.RenderTransform>
-                    <Image Source="{Binding PosterUrl}" Stretch="UniformToFill"/>
-                    <Border VerticalAlignment="Bottom" Background="#D900080D" Padding="7,8">
-                        <TextBlock Text="{Binding Title}" Foreground="White" FontSize="12"
-                                   CharacterSpacing="110" TextTrimming="CharacterEllipsis" MaxLines="2"/>
-                    </Border>
-                </Grid>
-            </Button>
-        </DataTemplate>
+        <SolidColorBrush x:Key="CardSurface" Color="{StaticResource SurfaceCard}"/>
+        <SolidColorBrush x:Key="CardBorder" Color="{StaticResource BorderDefault}"/>
     </Page.Resources>
 
-    <Grid>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" VerticalScrollMode="Enabled">
-            <StackPanel Spacing="16" Padding="0,6,0,28">
-                <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,0">
-                    <TextBlock Text="Continue Watching" Foreground="White" FontSize="21" FontWeight="SemiBold"/>
-                    <ProgressRing IsActive="{Binding IsLoading}" Width="20" Height="20" Foreground="{StaticResource GreenAccent}"/>
+    <Grid Background="{StaticResource SurfaceBaseBrush}">
+        <ScrollViewer x:Name="HomeScroll" VerticalScrollBarVisibility="Auto"
+                      VerticalScrollMode="Enabled" HorizontalScrollMode="Disabled"
+                      XYFocusKeyboardNavigation="Enabled">
+            <StackPanel Spacing="26" Padding="20,20,20,40">
+                <Border x:Name="HeroSection" Background="{StaticResource SurfaceCardBrush}"
+                        CornerRadius="12" Height="360" Margin="0,0,0,2"
+                        BorderBrush="{StaticResource BorderDefaultBrush}" BorderThickness="1">
+                    <Grid>
+                        <Image x:Name="HeroBackdrop" Stretch="UniformToFill" Opacity="0.72"/>
+                        <Border>
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                    <GradientStop Color="#FF05060A" Offset="0"/>
+                                    <GradientStop Color="#E605060A" Offset="0.48"/>
+                                    <GradientStop Color="#6605060A" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <Border VerticalAlignment="Bottom" Height="170">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#0005060A" Offset="0"/>
+                                    <GradientStop Color="#F205060A" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <StackPanel VerticalAlignment="Bottom" Spacing="10" Padding="28,20,28,26"
+                                    MaxWidth="760" HorizontalAlignment="Left">
+                            <TextBlock Text="FEATURED" Foreground="{StaticResource AccentBrush}"
+                                       FontSize="12" FontWeight="Bold"/>
+                            <TextBlock x:Name="HeroTitle" Text="Discover something great"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       FontSize="34" FontWeight="SemiBold" MaxLines="2"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock x:Name="HeroMetadata" Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="14" MaxLines="1" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="HeroDescription" Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="14" MaxLines="2" TextWrapping="Wrap"/>
+                            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+                                <Button x:Name="HeroWatchButton" Content="More Info"
+                                        Style="{StaticResource PrimaryButtonStyle}"
+                                        Click="HeroWatch_Click" IsEnabled="False"
+                                        XYFocusKeyboardNavigation="Enabled"/>
+                                <Button x:Name="HeroRefreshButton" Content="Refresh"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="Refresh_Click" XYFocusKeyboardNavigation="Enabled"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <ProgressRing x:Name="LoadingRing" IsActive="True" Width="34" Height="34"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"
+                                      Margin="20" Foreground="{StaticResource AccentBrush}"/>
+                    </Grid>
+                </Border>
+
+                <StackPanel x:Name="ContinueSection" Spacing="12" Visibility="Collapsed">
+                    <TextBlock Text="Continue Watching" Foreground="{StaticResource TextPrimaryBrush}"
+                               FontSize="22" FontWeight="SemiBold"/>
+                    <ScrollViewer x:Name="ContinueScroll" HorizontalScrollMode="Enabled"
+                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollMode="Disabled"
+                                  IsTabStop="False" XYFocusKeyboardNavigation="Enabled">
+                        <StackPanel x:Name="ContinueRow" Orientation="Horizontal" Spacing="14"/>
+                    </ScrollViewer>
                 </StackPanel>
-                <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollMode="Disabled" IsTabStop="False">
-                    <StackPanel x:Name="ContinueRow" Orientation="Horizontal" Spacing="12" MinHeight="184"/>
-                </ScrollViewer>
 
-                <TextBlock Text="Popular Movies" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
-                <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden" VerticalScrollMode="Disabled" IsTabStop="False">
-                    <StackPanel x:Name="PopularMoviesRow" Orientation="Horizontal" Spacing="12" MinHeight="198"/>
-                </ScrollViewer>
+                <StackPanel x:Name="PopularMoviesSection" Spacing="12">
+                    <TextBlock Text="Popular Movies" Foreground="{StaticResource TextPrimaryBrush}"
+                               FontSize="22" FontWeight="SemiBold"/>
+                    <ScrollViewer x:Name="MoviesScroll" HorizontalScrollMode="Enabled"
+                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollMode="Disabled"
+                                  IsTabStop="False" XYFocusKeyboardNavigation="Enabled">
+                        <StackPanel x:Name="PopularMoviesRow" Orientation="Horizontal" Spacing="14"/>
+                    </ScrollViewer>
+                </StackPanel>
 
-                <TextBlock Text="Popular Series" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
-                <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden" VerticalScrollMode="Disabled" IsTabStop="False">
-                    <StackPanel x:Name="PopularSeriesRow" Orientation="Horizontal" Spacing="12" MinHeight="198"/>
-                </ScrollViewer>
+                <StackPanel x:Name="PopularSeriesSection" Spacing="12">
+                    <TextBlock Text="Popular Series" Foreground="{StaticResource TextPrimaryBrush}"
+                               FontSize="22" FontWeight="SemiBold"/>
+                    <ScrollViewer x:Name="SeriesScroll" HorizontalScrollMode="Enabled"
+                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollMode="Disabled"
+                                  IsTabStop="False" XYFocusKeyboardNavigation="Enabled">
+                        <StackPanel x:Name="PopularSeriesRow" Orientation="Horizontal" Spacing="14"/>
+                    </ScrollViewer>
+                </StackPanel>
 
-                <TextBlock Text="Recommended For You" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
-                <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden" VerticalScrollMode="Disabled" IsTabStop="False">
-                    <StackPanel x:Name="RecommendedRow" Orientation="Horizontal" Spacing="12" MinHeight="198"/>
-                </ScrollViewer>
+                <StackPanel x:Name="RecommendedSection" Spacing="12">
+                    <TextBlock Text="More to Explore" Foreground="{StaticResource TextPrimaryBrush}"
+                               FontSize="22" FontWeight="SemiBold"/>
+                    <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollMode="Disabled" IsTabStop="False"
+                                  XYFocusKeyboardNavigation="Enabled">
+                        <StackPanel x:Name="RecommendedRow" Orientation="Horizontal" Spacing="14"/>
+                    </ScrollViewer>
+                </StackPanel>
 
-                <TextBlock Text="Recently Added" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
-                <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden" VerticalScrollMode="Disabled" IsTabStop="False">
-                    <StackPanel x:Name="RecentlyAddedRow" Orientation="Horizontal" Spacing="12" MinHeight="198"/>
-                </ScrollViewer>
+                <StackPanel x:Name="EmptyState" Visibility="Collapsed" Spacing="8" Padding="8,20">
+                    <TextBlock Text="No titles to show yet" Foreground="{StaticResource TextPrimaryBrush}"
+                               FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Text="Cinemeta couldn't return a catalog. Check your connection and try again."
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="14"
+                               TextWrapping="Wrap"/>
+                    <Button Content="Try Again" Click="Refresh_Click"
+                            Style="{StaticResource PrimaryButtonStyle}" HorizontalAlignment="Left"/>
+                </StackPanel>
 
-                <TextBlock Text="{Binding StatusMessage}" Foreground="#8C9AA1" FontSize="12"/>
-                <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF9388" FontSize="14" TextWrapping="Wrap"/>
+                <StackPanel Spacing="6" Margin="0,4,0,0">
+                    <TextBlock x:Name="StatusText" Text="{Binding StatusMessage}"
+                               Foreground="{StaticResource TextTertiaryBrush}" FontSize="12"/>
+                    <TextBlock x:Name="ErrorText" Text="{Binding ErrorMessage}"
+                               Foreground="{StaticResource ErrorBrush}" FontSize="13"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

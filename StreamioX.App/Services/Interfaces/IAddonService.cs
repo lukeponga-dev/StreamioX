@@ -10,6 +10,7 @@ namespace StreamioX.App.Services
         IReadOnlyList<InstalledAddon> InstalledAddons { get; }
         Task InitializeAsync(CancellationToken cancellationToken = default);
         Task<InstalledAddon?> InstallFromManifestUrlAsync(string manifestUrl, CancellationToken cancellationToken = default);
+        Task<AddonSyncSummary> SyncAllAsync(CancellationToken cancellationToken = default);
         Task UninstallAsync(string addonId);
         IReadOnlyList<InstalledAddon> GetCatalogProviders(string? type = null);
         IReadOnlyList<InstalledAddon> GetMetaProviders(string? type = null, string? contentId = null);

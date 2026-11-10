@@ -31,6 +31,8 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] private bool isLoadingMetadata;
         [ObservableProperty] private string? errorMessage;
         [ObservableProperty] private bool isSavedInLibrary;
+        // Partial-property generation is WinRT/NativeAOT compatible.
+        [ObservableProperty] public partial bool IsSeries { get; set; }
         [ObservableProperty] private string libraryButtonText = "Add to Library";
 
         // Flatten nested metadata into bindable page properties. This avoids UWP
@@ -69,6 +71,7 @@ namespace StreamioX.App.ViewModels
 
             movie.Type ??= "movie";
             SelectedMovie = movie;
+            IsSeries = string.Equals(movie.Type, "series", StringComparison.OrdinalIgnoreCase);
             IsSavedInLibrary = await _libraryService.IsSavedAsync(movie.Type ?? "movie", movie.Id ?? string.Empty).ConfigureAwait(true);
             LibraryButtonText = IsSavedInLibrary ? "Remove from Library" : "Add to Library";
             NotifyDetailsProperties();
@@ -93,6 +96,7 @@ namespace StreamioX.App.ViewModels
                 if (fullMeta != null)
                     SelectedMovie = MergePreview(movie, fullMeta);
 
+                IsSeries = string.Equals(SelectedMovie?.Type, "series", StringComparison.OrdinalIgnoreCase);
                 NotifyDetailsProperties();
 
                 if (SelectedMovie?.Videos != null)
@@ -194,6 +198,20 @@ namespace StreamioX.App.ViewModels
             return full;
         }
 
+        private void OpenPlayer(string streamUrl, StreamSource stream)
+        {
+            var title = !string.IsNullOrWhiteSpace(SelectedEpisode?.Title)
+                ? SelectedEpisode.Title
+                : !string.IsNullOrWhiteSpace(SelectedMovie?.Title)
+                    ? SelectedMovie.Title
+                    : stream.Title ?? "Now Playing";
+
+            var request = new PlaybackRequest(streamUrl, title,
+                requestHeaders: stream.BehaviorHints?.ProxyHeaders?.Request);
+            if (!_navigationService.NavigateTo(NavigationRoute.Player, request))
+                ErrorMessage = "The player could not be opened. Please try selecting the stream again.";
+        }
+
         [RelayCommand]
         private async Task PlayStreamAsync(StreamSource? stream)
         {
@@ -203,7 +221,7 @@ namespace StreamioX.App.ViewModels
             if (Uri.TryCreate(stream.Url, UriKind.Absolute, out var directUri)
                 && (directUri.Scheme == Uri.UriSchemeHttp || directUri.Scheme == Uri.UriSchemeHttps))
             {
-                _navigationService.NavigateTo(NavigationRoute.Player, directUri.AbsoluteUri);
+                OpenPlayer(directUri.AbsoluteUri, stream);
                 return;
             }
 
@@ -224,7 +242,7 @@ namespace StreamioX.App.ViewModels
                     .ConfigureAwait(true);
 
                 ErrorMessage = null;
-                _navigationService.NavigateTo(NavigationRoute.Player, streamUrl);
+                OpenPlayer(streamUrl, stream);
             }
             catch (Exception ex)
             {

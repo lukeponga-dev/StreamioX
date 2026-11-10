@@ -2,41 +2,154 @@
     x:Class="StreamioX.App.Views.PlayerPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Background="#05060A"
-    XYFocusKeyboardNavigation="Enabled">
-    <Grid Background="#05060A">
-        <MediaPlayerElement x:Name="PlayerWidget" AreTransportControlsEnabled="True" AutoPlay="True"
-                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-        <Grid VerticalAlignment="Top" Padding="42,26" Background="#B805060A">
-            <StackPanel Spacing="5">
-                <TextBlock Text="{Binding MediaTitle}" Foreground="White" FontSize="24" FontWeight="SemiBold"/>
-                <TextBlock Text="{Binding PlaybackError}" Foreground="#FFFF9B8F" FontSize="14" TextWrapping="Wrap"/>
+    Background="{StaticResource SurfaceBaseBrush}"
+    XYFocusKeyboardNavigation="Enabled"
+    IsTabStop="True"
+    KeyDown="PlayerPage_KeyDown">
+    <Grid Background="{StaticResource SurfaceBaseBrush}">
+        <!-- Video Player -->
+        <MediaPlayerElement x:Name="PlayerWidget" AutoPlay="True" IsTabStop="False"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                            AreTransportControlsEnabled="False"/>
+
+        <!-- Top Header Bar -->
+        <Grid x:Name="TopControls" VerticalAlignment="Top" Padding="28,24" Background="#D9000000"
+              BorderBrush="{StaticResource BorderDefaultBrush}" BorderThickness="0,0,0,1">
+                <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                <Button x:Name="BackButton" Width="48" Height="48" Padding="0"
+                        Background="#1A1F26" Foreground="{StaticResource TextPrimaryBrush}"
+                        Click="BackButton_Click" CornerRadius="6"
+                        Style="{StaticResource XboxFocusCardStyle}">
+                    <FontIcon Glyph="&#xE72B;" FontSize="20"/>
+                </Button>
+                <StackPanel Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding SeriesTitle, FallbackValue='StreamioX'}"
+                               Foreground="{StaticResource TextTertiaryBrush}" FontSize="11"/>
+                    <TextBlock Text="{Binding MediaTitle}" Foreground="{StaticResource TextPrimaryBrush}"
+                               FontSize="20" FontWeight="SemiBold"/>
+                </StackPanel>
             </StackPanel>
         </Grid>
-        <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Background="#D905060A"
-                Padding="28,18" BorderBrush="#553D3A55" BorderThickness="0,1,0,0">
+
+        <!-- Center Player Controls (Hidden until hover/interaction) -->
+        <Grid VerticalAlignment="Center" HorizontalAlignment="Center" x:Name="CenterControls"
+              Opacity="0">
+            <StackPanel Spacing="12" Orientation="Vertical" HorizontalAlignment="Center">
+                <!-- Time Display -->
+                <TextBlock Text="{Binding CurrentTimeDisplay, FallbackValue='00:00 / 00:00'}"
+                           Foreground="{StaticResource TextPrimaryBrush}" FontSize="16"
+                           TextAlignment="Center" Margin="0,0,0,12"/>
+
+                <!-- Main Controls -->
+                <StackPanel Orientation="Horizontal" Spacing="24" HorizontalAlignment="Center">
+                    <!-- Skip Back Button -->
+                    <Button x:Name="SkipBackButton" Width="56" Height="56" Padding="0"
+                            Background="#1A2A35" Foreground="{StaticResource TextPrimaryBrush}"
+                            Click="SkipBack_Click" CornerRadius="28"
+                            Style="{StaticResource XboxFocusCardStyle}"
+                            ToolTipService.ToolTip="Skip Back 10s">
+                        <StackPanel Spacing="0" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE71E;" FontSize="24"/>
+                            <TextBlock Text="10s" FontSize="10" TextAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Play/Pause Button (Primary) -->
+                    <Button x:Name="PlayPauseButton" Width="72" Height="72" Padding="0"
+                            Background="{StaticResource AccentBrush}" Foreground="White"
+                            Click="PlayPause_Click" CornerRadius="36"
+                            Style="{StaticResource XboxFocusCardStyle}"
+                            ToolTipService.ToolTip="Play / Pause (A / Space)">
+                        <FontIcon x:Name="PlayPauseIcon" Glyph="&#xE768;" FontSize="32"/>
+                    </Button>
+
+                    <!-- Skip Forward Button -->
+                    <Button x:Name="SkipForwardButton" Width="56" Height="56" Padding="0"
+                            Background="#1A2A35" Foreground="{StaticResource TextPrimaryBrush}"
+                            Click="SkipForward_Click" CornerRadius="28"
+                            Style="{StaticResource XboxFocusCardStyle}"
+                            ToolTipService.ToolTip="Skip Forward 10s">
+                        <StackPanel Spacing="0" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE71F;" FontSize="24"/>
+                            <TextBlock Text="10s" FontSize="10" TextAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- Progress Bar (Scrubber) - Center Below Video -->
+        <Grid x:Name="ProgressControls" VerticalAlignment="Center" Padding="28,0" HorizontalAlignment="Stretch" Margin="0,320,0,0">
+            <StackPanel Orientation="Vertical" Spacing="8">
+                <Slider x:Name="ProgressSlider" Height="4" Margin="0,0,0,0"
+                        Background="#2A3139" Foreground="{StaticResource AccentBrush}"
+                        Minimum="0" Maximum="100" Value="0" IsThumbToolTipEnabled="True"
+                        ValueChanged="ProgressSlider_ValueChanged"
+                        ToolTipService.ToolTip="{Binding CurrentTimeDisplay, FallbackValue='00:00 / 00:00'}"
+                        Style="{StaticResource XboxFocusCardStyle}"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding CurrentTime, FallbackValue='02:15'}"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                    <TextBlock Grid.Column="2" Text="{Binding TotalTime, FallbackValue='45:00'}"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                </Grid>
+            </StackPanel>
+        </Grid>
+
+        <!-- Bottom Control Bar -->
+        <Border x:Name="BottomControls" VerticalAlignment="Bottom" HorizontalAlignment="Stretch"
+                Background="#D9000000" Padding="28,20"
+                BorderBrush="{StaticResource BorderDefaultBrush}" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                    <Button Content="−10s" MinWidth="88" MinHeight="48" Click="SkipBack_Click"
-                            Background="#202235" Foreground="White"/>
-                    <Button Content="Play / Pause" MinWidth="132" MinHeight="48" Click="PlayPause_Click"
-                            Background="#7B5CFF" Foreground="White"/>
-                    <Button Content="+10s" MinWidth="88" MinHeight="48" Click="SkipForward_Click"
-                            Background="#202235" Foreground="White"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <TextBlock Text="Speed" Foreground="#C9C5D6" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="PlaybackSpeedBox" Width="112" SelectedIndex="1">
-                        <ComboBoxItem Content="0.75×" Tag="0.75"/>
-                        <ComboBoxItem Content="1×" Tag="1"/>
-                        <ComboBoxItem Content="1.25×" Tag="1.25"/>
-                        <ComboBoxItem Content="1.5×" Tag="1.5"/>
-                        <ComboBoxItem Content="2×" Tag="2"/>
-                    </ComboBox>
+
+                <!-- Status/Info Bar -->
+                <TextBlock Text="{Binding StreamingStatus, FallbackValue='Buffering Torrent stream from Local HTTP Adapter...'}"
+                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"
+                           VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="600"/>
+
+                <!-- Right Controls -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                    <!-- Playback Speed -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Speed" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="12"/>
+                        <ComboBox x:Name="PlaybackSpeedBox" Width="80" SelectedIndex="1"
+                                  Background="#1A1F26" Foreground="{StaticResource TextPrimaryBrush}"
+                                  BorderBrush="{StaticResource BorderDefaultBrush}"
+                                  Style="{StaticResource XboxFocusCardStyle}">
+                            <ComboBoxItem Content="0.75×" Tag="0.75"/>
+                            <ComboBoxItem Content="1×" Tag="1"/>
+                            <ComboBoxItem Content="1.25×" Tag="1.25"/>
+                            <ComboBoxItem Content="1.5×" Tag="1.5"/>
+                            <ComboBoxItem Content="2×" Tag="2"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Subtitles Button -->
+                    <Button x:Name="SubtitleButton" Width="44" Height="44" Padding="0" CornerRadius="6"
+                            Background="#1A2A35" Foreground="{StaticResource TextPrimaryBrush}"
+                            Click="SubtitleButton_Click"
+                            Style="{StaticResource XboxFocusCardStyle}"
+                            ToolTipService.ToolTip="Subtitles">
+                        <FontIcon Glyph="&#xE7AB;" FontSize="18"/>
+                    </Button>
+
+                    <!-- Audio Button -->
+                    <Button x:Name="AudioButton" Width="44" Height="44" Padding="0" CornerRadius="6"
+                            Background="#1A2A35" Foreground="{StaticResource TextPrimaryBrush}"
+                            Click="AudioButton_Click"
+                            Style="{StaticResource XboxFocusCardStyle}"
+                            ToolTipService.ToolTip="Audio">
+                        <FontIcon Glyph="&#xE767;" FontSize="18"/>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
