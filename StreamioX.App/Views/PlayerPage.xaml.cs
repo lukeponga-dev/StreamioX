@@ -218,12 +218,14 @@ namespace StreamioX.App.Views
         private void MediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
         {
             var error = $"Playback failed (0x{args.ExtendedErrorCode.HResult:X8}): {args.ErrorMessage}";
+            System.Diagnostics.Debug.WriteLine($"[Playback] MediaPlayer.MediaFailed: {error}");
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                 ViewModel.SetPlaybackError(error));
         }
 
         private void PlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
         {
+            System.Diagnostics.Debug.WriteLine($"[Playback] MediaPlayer state changed: {sender.PlaybackState}; position: {sender.Position}; duration: {sender.NaturalDuration}.");
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
                 ViewModel.SetPlaying(sender.PlaybackState == MediaPlaybackState.Playing);

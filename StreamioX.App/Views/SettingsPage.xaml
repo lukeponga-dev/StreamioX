@@ -24,6 +24,7 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                             <Button Content="Sign in with QR" Click="StartQr_Click" Margin="0,0,12,0"/>
+                            <Button Content="Continue with Facebook" Click="FacebookLogin_Click" Margin="0,0,12,0"/>
                             <Button Content="Cancel" Click="CancelQr_Click" Margin="0,0,12,0"/>
                             <Button Content="Sign out" Click="Logout_Click"/>
                         </StackPanel>

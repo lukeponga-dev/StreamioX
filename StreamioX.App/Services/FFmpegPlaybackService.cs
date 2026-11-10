@@ -42,6 +42,7 @@ namespace StreamioX.App.Services
             // login pages, blocked hosts and broken redirects before FFmpeg opens them.
             reportStage?.Invoke("Checking direct stream HTTP response");
             var resolvedUri = await ResolveAndValidateStreamAsync(uri, requestHeaders).ConfigureAwait(true);
+            System.Diagnostics.Debug.WriteLine($"[Playback] Probe completed. Original host: {uri.Host}; final host: {resolvedUri.Host}. FFmpeg will receive the ORIGINAL URL.");
 
             reportStage?.Invoke("Configuring FFmpeg network input");
             // FFmpegInteropX.UWP 2.1 ships with native D3D11 hardware decoding
@@ -64,11 +65,19 @@ namespace StreamioX.App.Services
             config.General.ReadAheadBufferDuration = TimeSpan.FromSeconds(15);
             config.General.ReadAheadBufferSize = 32 * 1024 * 1024;
 
-            reportStage?.Invoke("Opening resolved stream with FFmpegInteropX");
+            reportStage?.Invoke("Opening original stream URL with FFmpegInteropX");
+            System.Diagnostics.Debug.WriteLine("[Playback] Creating FFmpegMediaSource from original URI.");
+            System.Diagnostics.Debug.WriteLine($"[Playback] FFmpeg input scheme: {uri.Scheme}; host: {uri.Host}; port: {uri.Port}; path length: {uri.AbsolutePath.Length}.");
+            System.Diagnostics.Debug.WriteLine($"[Playback] Forwarding {requestHeaders?.Count ?? 0} request header(s) to FFmpeg; values are intentionally not logged.");
             try
             {
+                // The probe is diagnostic only. Do not substitute its redirect target:
+                // signed URLs and session-bound providers may require the original URL.
                 _mediaSource = await FFmpegMediaSource.CreateFromUriAsync(
-                    resolvedUri.AbsoluteUri, config);
+                    uri.AbsoluteUri, config);
+                System.Diagnostics.Debug.WriteLine(_mediaSource != null
+                    ? "[Playback] FFmpegMediaSource created successfully."
+                    : "[Playback] FFmpegMediaSource returned null.");
             }
             catch (Exception ex)
             {
@@ -84,6 +93,9 @@ namespace StreamioX.App.Services
 
             reportStage?.Invoke("Creating MediaPlaybackItem");
             var playbackItem = _mediaSource.CreateMediaPlaybackItem();
+            System.Diagnostics.Debug.WriteLine(playbackItem != null
+                ? "[Playback] MediaPlaybackItem created successfully."
+                : "[Playback] MediaPlaybackItem returned null.");
 
             if (playbackItem == null)
                 throw new InvalidOperationException("FFmpegInteropX returned no MediaPlaybackItem.");
@@ -110,6 +122,23 @@ namespace StreamioX.App.Services
 
             var contentType = response.Content.Headers.ContentType?.MediaType ?? "unknown";
             var finalUri = response.RequestMessage?.RequestUri ?? uri;
+
+            System.Diagnostics.Debug.WriteLine($"[Playback] HTTP probe: {(int)response.StatusCode} {response.ReasonPhrase ?? string.Empty}");
+            System.Diagnostics.Debug.WriteLine($"[Playback] Original URI host: {uri.Host}; final URI host: {finalUri.Host}; redirected: {!Uri.Compare(uri, finalUri, UriComponents.AbsoluteUri, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase).Equals(0)}");
+            System.Diagnostics.Debug.WriteLine($"[Playback] Content-Type: {contentType}; Content-Length: {response.Content.Headers.ContentLength?.ToString() ?? "unknown"}");
+            foreach (var header in response.Headers)
+            {
+                if (header.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase) ||
+                    header.Key.Equals("Cookie", StringComparison.OrdinalIgnoreCase) ||
+                    header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase) ||
+                    header.Key.Equals("Proxy-Authorization", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                System.Diagnostics.Debug.WriteLine($"[Playback] Response header: {header.Key}");
+            }
+            foreach (var header in response.Content.Headers)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Playback] Content header: {header.Key}");
+            }
 
             if (!response.IsSuccessStatusCode)
             {

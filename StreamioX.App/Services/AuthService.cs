@@ -81,34 +81,38 @@ namespace StreamioX.App.Services
         private Task LoadSavedSessionAsync()
         {
             var settings = ApplicationData.Current.LocalSettings.Values;
+            AuthKey = null;
+
+            // Treat a stale PasswordVault entry as a missing session. On some Windows builds
+            // FindAllByResource succeeds but RetrievePassword throws 0x80070490 because the
+            // underlying secret has already disappeared.
             PasswordVault? vault = null;
-            PasswordCredential? credential = null;
             try
             {
                 vault = new PasswordVault();
-                credential = vault.FindAllByResource(VaultResource)
-                    .FirstOrDefault(item => item.UserName == VaultUserName);
+                var credentials = vault.FindAllByResource(VaultResource);
+                var credential = credentials.FirstOrDefault(item => item.UserName == VaultUserName);
                 if (credential != null)
                 {
-                    // FindAllByResource can return a stale entry whose secret no longer exists.
-                    credential.RetrievePassword();
-                    AuthKey = credential.Password;
+                    try
+                    {
+                        credential.RetrievePassword();
+                        if (!string.IsNullOrWhiteSpace(credential.Password))
+                            AuthKey = credential.Password;
+                    }
+                    catch (Exception ex) when (ex is COMException || ex is UnauthorizedAccessException)
+                    {
+                        // Remove only the broken credential; never let a stale vault record
+                        // prevent the app from starting or migrating an older session.
+                        try { vault.Remove(credential); }
+                        catch (Exception) { }
+                    }
                 }
-            }
-            catch (COMException ex) when (ex.HResult == unchecked((int)0x80070490))
-            {
-                // A missing vault item is the normal signed-out state. Remove a stale shell entry
-                // when possible, then continue to the legacy-token migration below.
-                if (vault != null && credential != null)
-                {
-                    try { vault.Remove(credential); }
-                    catch (COMException) { }
-                }
-                AuthKey = null;
             }
             catch (Exception)
             {
-                // PasswordVault may be unavailable in restricted app states; use the fallback store.
+                // PasswordVault can be unavailable in restricted app states. Continue signed out
+                // and allow the legacy-token migration below.
                 AuthKey = null;
             }
 
@@ -464,14 +468,40 @@ namespace StreamioX.App.Services
 
         private static void RemoveVaultCredentials(PasswordVault vault)
         {
+            IReadOnlyList<PasswordCredential> credentials;
             try
             {
-                foreach (var credential in vault.FindAllByResource(VaultResource))
-                    vault.Remove(credential);
+                // FindAllByResource throws HRESULT 0x80070490 when the resource
+                // has no entries. This is expected on a first login or after logout.
+                credentials = vault.FindAllByResource(VaultResource);
             }
-            catch
+            catch (System.Runtime.InteropServices.COMException ex)
+                when (ex.HResult == unchecked((int)0x80070490))
             {
-                // No saved credential is a normal first-login state.
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // The vault may be unavailable in a restricted app context.
+                return;
+            }
+
+            foreach (var credential in credentials)
+            {
+                try
+                {
+                    vault.Remove(credential);
+                }
+                catch (System.Runtime.InteropServices.COMException ex)
+                    when (ex.HResult == unchecked((int)0x80070490))
+                {
+                    // Another operation may already have removed this entry.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Do not let optional cleanup interrupt authentication.
+                    return;
+                }
             }
         }
 

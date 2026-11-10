@@ -20,6 +20,11 @@ namespace StreamioX.App.Views
             await ViewModel.StartQrLoginCommand.ExecuteAsync(null);
         }
 
+        private async void FacebookLogin_Click(object sender, RoutedEventArgs e)
+        {
+            await ViewModel.LoginWithFacebookCommand.ExecuteAsync(null);
+        }
+
         private void CancelQr_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.CancelQrLoginCommand.Execute(null);

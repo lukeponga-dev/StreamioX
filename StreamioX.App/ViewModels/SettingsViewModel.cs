@@ -117,14 +117,24 @@ namespace StreamioX.App.ViewModels
         }
 
         [RelayCommand]
-        private async Task StartQrLoginAsync()
+        private Task StartQrLoginAsync() => RunDeviceLinkLoginAsync(openBrowser: false);
+
+        [RelayCommand]
+        private Task LoginWithFacebookAsync() => RunDeviceLinkLoginAsync(openBrowser: true);
+
+        // Facebook authentication is completed on Stremio's official sign-in page.
+        // The app only receives the resulting Stremio device-link auth key; it never
+        // handles or stores the user's Facebook password or access token.
+        private async Task RunDeviceLinkLoginAsync(bool openBrowser)
         {
             _pollCts?.Cancel();
             _pollCts = new CancellationTokenSource();
             var token = _pollCts.Token;
 
             IsLinking = true;
-            AuthStatusMessage = "Creating link code…";
+            AuthStatusMessage = openBrowser
+                ? "Preparing secure Stremio sign-in…"
+                : "Creating link code…";
             QrImage = null;
             LinkCode = null;
 
@@ -134,9 +144,19 @@ namespace StreamioX.App.ViewModels
                 LinkCode = session.Code;
                 LinkUrl = session.LinkUrl;
                 QrImage = new BitmapImage(new Uri(session.QrImageUrl));
-                AuthStatusMessage = $"Scan QR or open link.stremio.com and enter code {session.Code}";
+                AuthStatusMessage = openBrowser
+                    ? "Complete Facebook sign-in in the browser. Return here when finished."
+                    : $"Scan QR or open link.stremio.com and enter code {session.Code}";
 
-                // Poll until linked or cancelled
+                if (openBrowser)
+                {
+                    var launched = await Launcher.LaunchUriAsync(new Uri(session.LinkUrl));
+                    if (!launched)
+                        AuthStatusMessage = "Could not open the sign-in page. Scan the QR code or open the link manually.";
+                }
+
+                // The same device-link poll handles email, Facebook and other methods
+                // offered by Stremio's hosted login page.
                 while (!token.IsCancellationRequested)
                 {
                     await Task.Delay(2500, token);
@@ -156,7 +176,7 @@ namespace StreamioX.App.ViewModels
             }
             catch (Exception ex)
             {
-                AuthStatusMessage = $"Link failed: {ex.Message}";
+                AuthStatusMessage = $"Sign-in failed: {ex.Message}";
             }
             finally
             {
