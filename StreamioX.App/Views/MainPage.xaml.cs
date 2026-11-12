@@ -4,9 +4,11 @@ using StreamioX.App.Navigation;
 using StreamioX.App.ViewModels;
 using StreamioX.App.Services;
 using StreamioX.App.Layout;
+using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 
 namespace StreamioX.App.Views
 {
@@ -15,6 +17,15 @@ namespace StreamioX.App.Views
         public MainViewModel ViewModel { get; }
         private readonly INavigationService _navigationService;
         private readonly IAuthService _authService;
+
+        private static readonly SolidColorBrush NavSelectedBackground =
+            new SolidColorBrush(Color.FromArgb(255, 35, 27, 57));
+        private static readonly SolidColorBrush NavIdleBackground =
+            new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+        private static readonly SolidColorBrush NavSelectedForeground =
+            new SolidColorBrush(Color.FromArgb(255, 224, 211, 255));
+        private static readonly SolidColorBrush NavIdleForeground =
+            new SolidColorBrush(Color.FromArgb(255, 167, 169, 184));
 
         public MainPage()
         {
@@ -28,6 +39,7 @@ namespace StreamioX.App.Views
             DataContext = ViewModel;
             Loaded += MainPage_Loaded;
             Unloaded += MainPage_Unloaded;
+            SetActiveNavigationItem("Home");
         }
 
         private void MainPage_Loaded(object sender, RoutedEventArgs e)
@@ -35,25 +47,49 @@ namespace StreamioX.App.Views
             SystemNavigationManager.GetForCurrentView().BackRequested += System_BackRequested;
             _authService.SessionChanged -= AuthService_SessionChanged;
             _authService.SessionChanged += AuthService_SessionChanged;
-            NavShell.SelectedItem = HomeNavItem;
             if (ContentFrame.Content == null) ViewModel.NavigateToHomeCommand.Execute(null);
             UpdatePlaybackChrome(ContentFrame.Content is PlayerPage);
             _ = RefreshProfileAsync();
             if (ContentFrame.Content is not PlayerPage)
-                HomeNavItem.Focus(FocusState.Programmatic);
+                HomeNavButton.Focus(FocusState.Programmatic);
         }
 
         private void ContentFrame_Navigated(object sender, Windows.UI.Xaml.Navigation.NavigationEventArgs e)
         {
-            // PlayerPage is hosted in the same Frame, but takes over the entire
-            // app viewport: hide navigation/profile chrome and remove safe-area padding.
             UpdatePlaybackChrome(e.Content is PlayerPage);
+            var navigationTag = GetNavigationTag(e.Content);
+            if (navigationTag != null) SetActiveNavigationItem(navigationTag);
+        }
+
+        private static string? GetNavigationTag(object? page)
+        {
+            if (page is HomePage) return "Home";
+            if (page is DiscoverPage) return "Discover";
+            if (page is LibraryPage) return "Library";
+            if (page is SearchPage) return "Search";
+            if (page is AddonsPage) return "Addons";
+            return null;
+        }
+
+        private void SetActiveNavigationItem(string? activeTag)
+        {
+            SetNavigationButton(HomeNavButton, HomeNavIndicator, activeTag == "Home");
+            SetNavigationButton(DiscoverNavButton, DiscoverNavIndicator, activeTag == "Discover");
+            SetNavigationButton(LibraryNavButton, LibraryNavIndicator, activeTag == "Library");
+            SetNavigationButton(SearchNavButton, SearchNavIndicator, activeTag == "Search");
+            SetNavigationButton(AddonsNavButton, AddonsNavIndicator, activeTag == "Addons");
+        }
+
+        private static void SetNavigationButton(Button button, Border indicator, bool isActive)
+        {
+            button.Background = isActive ? NavSelectedBackground : NavIdleBackground;
+            button.Foreground = isActive ? NavSelectedForeground : NavIdleForeground;
+            indicator.Opacity = isActive ? 1 : 0;
         }
 
         private void UpdatePlaybackChrome(bool isPlayingPage)
         {
-            NavShell.Visibility = isPlayingPage ? Visibility.Collapsed : Visibility.Visible;
-            ProfileButton.Visibility = isPlayingPage ? Visibility.Collapsed : Visibility.Visible;
+            TopBar.Visibility = isPlayingPage ? Visibility.Collapsed : Visibility.Visible;
             RootLayout.Padding = isPlayingPage ? new Thickness(0) : XboxConstants.SafeArea;
         }
 
@@ -62,7 +98,7 @@ namespace StreamioX.App.Views
             System.Diagnostics.Debug.WriteLine($"[StreamioX] Page navigation failed: {e.SourcePageType?.FullName}: {e.Exception}");
             ContentFrame.Content = new Grid
             {
-                Background = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 5, 9, 12)),
+                Background = new SolidColorBrush(Color.FromArgb(255, 5, 6, 10)),
                 Children =
                 {
                     new StackPanel
@@ -72,9 +108,9 @@ namespace StreamioX.App.Views
                         VerticalAlignment = VerticalAlignment.Center,
                         Children =
                         {
-                            new TextBlock { Text = "This page couldn't be opened", FontSize = 26, FontWeight = Windows.UI.Text.FontWeights.SemiBold, Foreground = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Colors.White) },
-                            new TextBlock { Text = e.Exception?.Message ?? "Unknown navigation error", FontSize = 16, TextWrapping = TextWrapping.Wrap, Foreground = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 210, 220, 225)) },
-                            new TextBlock { Text = e.SourcePageType?.FullName ?? "Unknown page", FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 120, 140, 150)) }
+                            new TextBlock { Text = "This page couldn't be opened", FontSize = 26, FontWeight = Windows.UI.Text.FontWeights.SemiBold, Foreground = new SolidColorBrush(Colors.White) },
+                            new TextBlock { Text = e.Exception?.Message ?? "Unknown navigation error", FontSize = 16, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromArgb(255, 210, 220, 225)) },
+                            new TextBlock { Text = e.SourcePageType?.FullName ?? "Unknown page", FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromArgb(255, 120, 140, 150)) }
                         }
                     }
                 }
@@ -87,6 +123,7 @@ namespace StreamioX.App.Views
             SystemNavigationManager.GetForCurrentView().BackRequested -= System_BackRequested;
             _authService.SessionChanged -= AuthService_SessionChanged;
             ContentFrame.Navigated -= ContentFrame_Navigated;
+            ContentFrame.NavigationFailed -= ContentFrame_NavigationFailed;
         }
 
         private async Task RefreshProfileAsync()
@@ -130,9 +167,9 @@ namespace StreamioX.App.Views
             if (ContentFrame.CanGoBack) { e.Handled = true; ContentFrame.GoBack(); }
         }
 
-        private void NavShell_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+        private void NavButton_Click(object sender, RoutedEventArgs e)
         {
-            if (args.InvokedItemContainer?.Tag is not string tag) return;
+            if (sender is not Button button || button.Tag is not string tag) return;
             switch (tag)
             {
                 case "Home": ViewModel.NavigateToHomeCommand.Execute(null); break;

@@ -4,74 +4,159 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:layout="using:StreamioX.App.Layout"
     XYFocusKeyboardNavigation="Enabled"
-    Background="#05090C">
+    Background="#05060A">
+
+    <Page.Resources>
+        <Style x:Key="TopNavButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#A7A9B8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="15,8,15,7"/>
+            <Setter Property="MinWidth" Value="88"/>
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            <Setter Property="FocusVisualPrimaryBrush" Value="#9B7BFF"/>
+            <Setter Property="FocusVisualPrimaryThickness" Value="2"/>
+            <Setter Property="FocusVisualSecondaryBrush" Value="#9B7BFF"/>
+            <Setter Property="FocusVisualSecondaryThickness" Value="1"/>
+        </Style>
+    </Page.Resources>
+
     <Grid x:Name="RootLayout" Padding="{x:Bind layout:XboxConstants.SafeArea}">
         <Grid.Background>
             <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Color="#05090C" Offset="0"/>
-                <GradientStop Color="#07130F" Offset="1"/>
+                <GradientStop Color="#05060A" Offset="0"/>
+                <GradientStop Color="#090B14" Offset="1"/>
             </LinearGradientBrush>
         </Grid.Background>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="76"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Navigation chrome occupies its own row so playback can hide it
-             without hiding the Frame that hosts PlayerPage. -->
-        <NavigationView x:Name="NavShell" Grid.Row="0" Height="64" VerticalAlignment="Top" PaneDisplayMode="Top"
-                        PaneTitle="STREAMIOX" IsSettingsVisible="False"
-                        IsBackButtonVisible="Collapsed" AlwaysShowHeader="False"
-                        Background="#05060A" XYFocusKeyboardNavigation="Enabled"
-                        ItemInvoked="NavShell_ItemInvoked">
-            <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="HomeNavItem" Content="Home" Tag="Home">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;"/></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Discover" Tag="Discover">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE71C;"/></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Search" Tag="Search">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE721;"/></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Library" Tag="Library">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8F1;"/></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Add-ons" Tag="Addons">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE718;"/></NavigationViewItem.Icon>
-                </NavigationViewItem>
-            </NavigationView.MenuItems>
-        </NavigationView>
+        <!-- Compact controller-first navigation chrome. -->
+        <Border x:Name="TopBar" Grid.Row="0" Background="#0B0D17"
+                BorderBrush="#252238" BorderThickness="1" CornerRadius="14"
+                Padding="16,0" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10"
+                            VerticalAlignment="Center" Margin="2,0,22,0">
+                    <Border Width="38" Height="38" CornerRadius="11"
+                            Background="#6E4BE8" BorderBrush="#A58AFF" BorderThickness="1">
+                        <FontIcon Glyph="&#xE768;" FontSize="20" Foreground="White"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                        <TextBlock Text="STREAMIOX" Foreground="#FFFFFF"
+                                   FontSize="17" FontWeight="Bold" CharacterSpacing="90"/>
+                        <TextBlock Text="ENTERTAINMENT" Foreground="#8E86A9"
+                                   FontSize="9" FontWeight="SemiBold" CharacterSpacing="150"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Spacing="5">
+                    <Button x:Name="HomeNavButton" Tag="Home" Style="{StaticResource TopNavButtonStyle}"
+                            Click="NavButton_Click" IsTabStop="True">
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE80F;" FontSize="16"/>
+                                <TextBlock Text="Home" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Border x:Name="HomeNavIndicator" Height="3" CornerRadius="2" Background="#9B7BFF" Opacity="1"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="DiscoverNavButton" Tag="Discover" Style="{StaticResource TopNavButtonStyle}"
+                            Click="NavButton_Click" IsTabStop="True">
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE71C;" FontSize="16"/>
+                                <TextBlock Text="Discover" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Border x:Name="DiscoverNavIndicator" Height="3" CornerRadius="2" Background="#9B7BFF" Opacity="0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="LibraryNavButton" Tag="Library" Style="{StaticResource TopNavButtonStyle}"
+                            Click="NavButton_Click" IsTabStop="True">
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE8F1;" FontSize="16"/>
+                                <TextBlock Text="Library" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Border x:Name="LibraryNavIndicator" Height="3" CornerRadius="2" Background="#9B7BFF" Opacity="0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SearchNavButton" Tag="Search" Style="{StaticResource TopNavButtonStyle}"
+                            Click="NavButton_Click" IsTabStop="True">
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE721;" FontSize="16"/>
+                                <TextBlock Text="Search" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Border x:Name="SearchNavIndicator" Height="3" CornerRadius="2" Background="#9B7BFF" Opacity="0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="AddonsNavButton" Tag="Addons" Style="{StaticResource TopNavButtonStyle}"
+                            Click="NavButton_Click" IsTabStop="True">
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE718;" FontSize="16"/>
+                                <TextBlock Text="Add-ons" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Border x:Name="AddonsNavIndicator" Height="3" CornerRadius="2" Background="#9B7BFF" Opacity="0"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <Button x:Name="ProfileButton" Grid.Column="2"
+                        HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Padding="9,6" Background="#171426" BorderBrush="#393052"
+                        BorderThickness="1" CornerRadius="10"
+                        XYFocusKeyboardNavigation="Enabled"
+                        FocusVisualPrimaryBrush="#9B7BFF" FocusVisualPrimaryThickness="2">
+                    <StackPanel Orientation="Horizontal" Spacing="9">
+                        <Border Width="32" Height="32" CornerRadius="16"
+                                Background="#34265E" BorderBrush="#9B7BFF" BorderThickness="1">
+                            <FontIcon Glyph="&#xE77B;" Foreground="#E4D9FF" FontSize="17"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock x:Name="ProfileNameText" Text="Sign In" Foreground="White"
+                                   VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold"/>
+                        <FontIcon Glyph="&#xE70D;" Foreground="#A7A0BA" FontSize="10"
+                                  VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <Border Width="230" Padding="14" Background="#10101B"
+                                    BorderBrush="#393052" BorderThickness="1" CornerRadius="10">
+                                <StackPanel Spacing="9">
+                                    <TextBlock x:Name="FlyoutProfileNameText" Text="Sign In"
+                                               Foreground="White" FontSize="18" FontWeight="SemiBold"/>
+                                    <TextBlock Text="STREAMIOX PROFILE" Foreground="#A49ABF"
+                                               FontSize="10" CharacterSpacing="100"/>
+                                    <Rectangle Height="1" Fill="#302A42"/>
+                                    <Button Content="My Library" HorizontalAlignment="Stretch" Click="ProfileLibrary_Click"/>
+                                    <Button Content="Add-ons" HorizontalAlignment="Stretch" Click="ProfileAddons_Click"/>
+                                    <Button Content="Settings" HorizontalAlignment="Stretch" Click="ProfileSettings_Click"/>
+                                    <Button Content="Diagnostics" HorizontalAlignment="Stretch" Click="ProfileDiagnostics_Click"/>
+                                    <Button Content="About StreamioX" HorizontalAlignment="Stretch" Click="ProfileAbout_Click"/>
+                                </StackPanel>
+                            </Border>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
+        </Border>
 
         <Frame x:Name="ContentFrame" Grid.Row="1" XYFocusKeyboardNavigation="Enabled"/>
-
-        <Button x:Name="ProfileButton" Grid.Row="0"
-                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,7,14,0"
-                Padding="10,5" Background="#101A20" BorderBrush="#244238" BorderThickness="1"
-                XYFocusKeyboardNavigation="Enabled">
-            <StackPanel Orientation="Horizontal" Spacing="9">
-                <Border Width="30" Height="30" CornerRadius="15" Background="#173C2A" BorderBrush="#20E66B" BorderThickness="1">
-                    <FontIcon Glyph="&#xE77B;" Foreground="#B9FFD0" FontSize="17"/>
-                </Border>
-                <TextBlock x:Name="ProfileNameText" Text="Sign In" Foreground="White" VerticalAlignment="Center" FontSize="14"/>
-                <TextBlock Text="⌄" Foreground="#A0ADB3" VerticalAlignment="Center"/>
-            </StackPanel>
-            <Button.Flyout>
-                <Flyout Placement="Bottom">
-                    <Border Width="220" Padding="14" Background="#0C1419">
-                        <StackPanel Spacing="9">
-                            <TextBlock x:Name="FlyoutProfileNameText" Text="Sign In" Foreground="White" FontSize="18" FontWeight="SemiBold"/>
-                            <TextBlock Text="STREAMIOX PROFILE" Foreground="#91A29A" FontSize="11"/>
-                            <Rectangle Height="1" Fill="#263B33"/>
-                            <Button Content="My Library" HorizontalAlignment="Stretch" Click="ProfileLibrary_Click"/>
-                            <Button Content="Add-ons" HorizontalAlignment="Stretch" Click="ProfileAddons_Click"/>
-                            <Button Content="Settings" HorizontalAlignment="Stretch" Click="ProfileSettings_Click"/>
-                            <Button Content="Diagnostics" HorizontalAlignment="Stretch" Click="ProfileDiagnostics_Click"/>
-                            <Button Content="About StreamioX" HorizontalAlignment="Stretch" Click="ProfileAbout_Click"/>
-                        </StackPanel>
-                    </Border>
-                </Flyout>
-            </Button.Flyout>
-        </Button>
     </Grid>
 </Page>
