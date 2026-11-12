@@ -1,3 +1,5 @@
+// Purpose: Implements FFmpegPlaybackService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 namespace StreamioX.App.Services
 {
     using FFmpegInteropX;

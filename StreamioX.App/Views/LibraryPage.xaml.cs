@@ -1,3 +1,5 @@
+// Purpose: Connects the LibraryPage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -48,8 +50,10 @@ namespace StreamioX.App.Views
                 _filter == value ? (byte)92 : (byte)24,
                 _filter == value ? (byte)255 : (byte)39));
 
+        /// <summary>Applies the selected library filter and sort order before updating the visible entries.</summary>
         private void SortBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyFilters();
 
+        /// <summary>Applies the selected library filter and sort order before updating the visible entries.</summary>
         private void ApplyFilters()
         {
             if (LibraryItems == null) return;

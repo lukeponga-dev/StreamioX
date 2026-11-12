@@ -1,3 +1,5 @@
+// Purpose: Owns DetailsViewModel screen state and user actions, keeping presentation logic separate from the XAML view.
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -71,6 +73,7 @@ namespace StreamioX.App.ViewModels
             _libraryService = libraryService ?? throw new ArgumentNullException(nameof(libraryService));
         }
 
+        /// <summary>Loads full metadata, library state, and available streams for the selected media item.</summary>
         public async Task InitializeAsync(Movie movie)
         {
             _loadCts?.Cancel();
@@ -217,6 +220,7 @@ namespace StreamioX.App.ViewModels
             return time.TotalHours >= 1 ? time.ToString(@"h\:mm\:ss") : time.ToString(@"m\:ss");
         }
 
+        /// <summary>Queries compatible add-ons for streams and filters out unusable playback sources.</summary>
         private async Task LoadStreamsAsync(string contentId, CancellationToken cancellationToken)
         {
             if (SelectedMovie == null || string.IsNullOrWhiteSpace(contentId)) return;
@@ -280,6 +284,7 @@ namespace StreamioX.App.ViewModels
             (Uri.TryCreate(stream.Url, UriKind.Absolute, out var uri) &&
              string.Equals(uri.Scheme, "magnet", StringComparison.OrdinalIgnoreCase));
 
+        /// <summary>Preloads episode stream results so selecting the next episode feels more responsive.</summary>
         private async Task PrefetchEpisodeStreamsAsync(string episodeId, CancellationToken cancellationToken)
         {
             try
@@ -301,6 +306,7 @@ namespace StreamioX.App.ViewModels
             }
         }
 
+        /// <summary>Resolves torrent sources ahead of playback to reduce delay when a stream is selected.</summary>
         private async Task PreResolveTorrentUrlsAsync(
             System.Collections.Generic.IReadOnlyList<StreamSource> streams,
             CancellationToken cancellationToken)
@@ -346,6 +352,7 @@ namespace StreamioX.App.ViewModels
         private static string? Prefer(string? primary, string? fallback) =>
             string.IsNullOrWhiteSpace(primary) ? fallback : primary;
 
+        /// <summary>Combines lightweight catalog data with full metadata while retaining useful preview fields.</summary>
         private static Movie MergePreview(Movie preview, Movie full)
         {
             // Add-on metadata can contain empty strings rather than null for
@@ -400,6 +407,7 @@ namespace StreamioX.App.ViewModels
         }
 
         [RelayCommand]
+        /// <summary>Validates the selected source and prepares the player navigation request.</summary>
         private async Task PlayStreamAsync(StreamSource? stream)
         {
             if (stream == null)

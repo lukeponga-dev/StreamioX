@@ -1,3 +1,5 @@
+// Purpose: Connects the DiscoverPage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -46,6 +48,7 @@ namespace StreamioX.App.Views
             FocusHelper.Restore(this, CatalogGrid);
         }
 
+        /// <summary>Subscribes to view-model updates and refreshes the catalog when the page becomes active.</summary>
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
@@ -60,6 +63,7 @@ namespace StreamioX.App.Views
                 TypeAllButtonFocus();
         }
 
+        /// <summary>Unsubscribes page events and cancels page-scoped work when leaving Discover.</summary>
         protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
         {
             FocusHelper.Capture(this, CatalogGrid);
@@ -149,6 +153,7 @@ namespace StreamioX.App.Views
             UpdateCountSummary();
         }
 
+        /// <summary>Builds genre filter chips from the currently available content and selected type.</summary>
         private void RenderGenres()
         {
             _isRenderingFilters = true;
@@ -225,6 +230,7 @@ namespace StreamioX.App.Views
             CountSummaryText.Text = $"{movieCount} movies · {seriesCount} series · {visible.Count} titles";
         }
 
+        /// <summary>Applies the active type and genre filters, then refreshes the visible media grid.</summary>
         private void UpdateResults()
         {
             var visible = GetGenreFilteredMovies().ToList();

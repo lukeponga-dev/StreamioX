@@ -1,3 +1,5 @@
+// Purpose: Implements PlaybackDiagnostics application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Diagnostics;
 using System.IO;

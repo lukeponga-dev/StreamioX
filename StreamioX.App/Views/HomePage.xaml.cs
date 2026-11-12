@@ -1,3 +1,5 @@
+// Purpose: Connects the HomePage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using System;
 using System.Collections.Generic;
 using StreamioX.App.Models;
@@ -71,6 +73,7 @@ namespace StreamioX.App.Views
                 ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        /// <summary>Updates the featured banner with the selected title, artwork, and metadata.</summary>
         private void RenderHero(Movie? movie)
         {
             HeroTitle.Text = movie?.Title ?? (ViewModel.IsLoading ? "Finding your next favourite…" : "Discover something great");
@@ -94,6 +97,7 @@ namespace StreamioX.App.Views
             return string.Join("  •  ", parts);
         }
 
+        /// <summary>Creates controller-focusable poster cards for a home-screen content row.</summary>
         private void RenderPosterRow(Panel row, IEnumerable<Movie> movies)
         {
             row.Children.Clear();
@@ -101,6 +105,7 @@ namespace StreamioX.App.Views
                 row.Children.Add(CreatePosterCard(movie));
         }
 
+        /// <summary>Builds a poster card and attaches the media item used by its click handler.</summary>
         private Button CreatePosterCard(Movie movie)
         {
             var image = CreatePosterImage(movie.PosterUrl, 150, 218);
@@ -136,6 +141,7 @@ namespace StreamioX.App.Views
             return button;
         }
 
+        /// <summary>Builds a resume-watching card using the saved library progress.</summary>
         private Button CreateContinueCard(LibraryEntry entry)
         {
             var grid = new Grid { Width = 350, Height = 178 };
@@ -203,6 +209,7 @@ namespace StreamioX.App.Views
             return image;
         }
 
+        /// <summary>Creates an image source from a remote artwork URL without letting decode errors break the page.</summary>
         private static bool TryCreateBitmap(string? url, out BitmapImage bitmap)
         {
             bitmap = null!;

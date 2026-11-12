@@ -1,3 +1,5 @@
+// Purpose: Declares the IAuthService service contract used to keep features independent of concrete implementations. Implements IAuthService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Threading;
 using System.Threading.Tasks;

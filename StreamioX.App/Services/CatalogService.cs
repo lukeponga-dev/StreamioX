@@ -1,3 +1,5 @@
+// Purpose: Implements CatalogService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -33,6 +35,7 @@ namespace StreamioX.App.Services
             return response?.Metas ?? Array.Empty<Movie>();
         }
 
+        /// <summary>Queries compatible catalog resources across installed add-ons and merges their results.</summary>
         public async Task<IReadOnlyList<Movie>> GetFromInstalledAddonsAsync(
             string type = "movie", string? preferredCatalogId = null,
             CancellationToken cancellationToken = default)
@@ -77,6 +80,7 @@ namespace StreamioX.App.Services
             return results;
         }
 
+        /// <summary>Searches installed add-ons for matching media and combines provider responses.</summary>
         public async Task<IReadOnlyList<Movie>> SearchInstalledAddonsAsync(
             string query, CancellationToken cancellationToken = default)
         {

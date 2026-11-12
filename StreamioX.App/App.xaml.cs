@@ -1,3 +1,5 @@
+// Purpose: Bootstraps the UWP application, configures services, and owns application-level lifecycle events.
+
 using StreamioX.App.Services;
 using StreamioX.App.Views;
 using System;
@@ -60,6 +62,7 @@ namespace StreamioX.App
             _ = StartTorrentServerAsync("app launch");
         }
 
+        /// <summary>Starts the local torrent HTTP bridge and records startup failures for diagnostics.</summary>
         private async Task StartTorrentServerAsync(string reason)
         {
             try
@@ -88,6 +91,7 @@ namespace StreamioX.App
             throw new Exception("Failed to load Page " + e.SourcePageType.FullName);
         }
 
+        /// <summary>Persists application state and releases resources before the app is suspended.</summary>
         private async void OnSuspending(object sender, SuspendingEventArgs e)
         {
             var deferral = e.SuspendingOperation.GetDeferral();

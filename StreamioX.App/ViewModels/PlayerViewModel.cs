@@ -1,3 +1,5 @@
+// Purpose: Owns PlayerViewModel screen state and user actions, keeping presentation logic separate from the XAML view.
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 
@@ -17,6 +19,7 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] private string currentTimeDisplay = "00:00 / 00:00";
         [ObservableProperty] private double playbackProgress;
 
+        /// <summary>Sets the selected stream and display metadata before playback begins.</summary>
         public void LoadStream(string streamUrl, string title, string? series = null)
         {
             CurrentStreamUrl = streamUrl;
@@ -36,6 +39,7 @@ namespace StreamioX.App.ViewModels
 
         public void SetPlaying(bool playing) => IsPlaying = playing;
 
+        /// <summary>Updates elapsed and total playback time for the player progress display.</summary>
         public void UpdatePlaybackTime(TimeSpan current, TimeSpan total)
         {
             CurrentTime = FormatTime(current);

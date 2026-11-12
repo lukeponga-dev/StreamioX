@@ -1,3 +1,5 @@
+// Purpose: Owns HomeViewModel screen state and user actions, keeping presentation logic separate from the XAML view.
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.Generic;
@@ -37,6 +39,7 @@ namespace StreamioX.App.ViewModels
             _libraryService = libraryService ?? throw new ArgumentNullException(nameof(libraryService));
         }
 
+        /// <summary>Loads featured media, catalog rows, and continue-watching entries for the home screen.</summary>
         public async Task LoadAsync()
         {
             if (IsLoading) return;
@@ -99,6 +102,7 @@ namespace StreamioX.App.ViewModels
             finally { IsLoading = false; }
         }
 
+        /// <summary>Retrieves a home-screen catalog for the requested Stremio content type.</summary>
         private async Task<IReadOnlyList<Movie>> LoadHomeCatalogAsync(string type, System.Threading.CancellationToken cancellationToken)
         {
             try

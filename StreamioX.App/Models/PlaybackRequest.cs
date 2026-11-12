@@ -1,3 +1,5 @@
+// Purpose: Defines PlaybackRequest data exchanged between app features and external Stremio-compatible services.
+
 using System.Collections.Generic;
 
 namespace StreamioX.App.Models

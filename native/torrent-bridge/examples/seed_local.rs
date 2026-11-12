@@ -1,3 +1,5 @@
+// Purpose: Provides a small executable example for exercising the torrent bridge outside the Xbox app.
+
 use anyhow::{Context, Result};
 use librqbit::{
     AddTorrent, AddTorrentOptions, CreateTorrentOptions, Session, SessionOptions,

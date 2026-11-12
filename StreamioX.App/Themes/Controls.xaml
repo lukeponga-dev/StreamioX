@@ -1,4 +1,5 @@
-﻿<ResourceDictionary
+<!-- Purpose: Defines shared Controls theme resources so screens use consistent Xbox visual styling. -->
+<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 

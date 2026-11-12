@@ -1,4 +1,6 @@
-﻿namespace StreamioX.App.Navigation
+// Purpose: Defines NavigationRoute navigation contracts and route resolution for the application.
+
+namespace StreamioX.App.Navigation
 {
     public enum NavigationRoute
     {

@@ -1,3 +1,5 @@
+// Purpose: Defines AuthModels data exchanged between app features and external Stremio-compatible services.
+
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;

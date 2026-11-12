@@ -1,3 +1,5 @@
+// Purpose: Declares the ITorrentBridgeService service contract used to keep features independent of concrete implementations. Implements ITorrentBridgeService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System.Threading;
 using System.Threading.Tasks;
 using StreamioX.App.Models;

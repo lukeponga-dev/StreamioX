@@ -1,3 +1,5 @@
+// Purpose: Declares the ICatalogService service contract used to keep features independent of concrete implementations. Implements ICatalogService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;

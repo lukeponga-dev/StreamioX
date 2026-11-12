@@ -1,3 +1,5 @@
+// Purpose: Exports the native torrent bridge boundary consumed by the managed Xbox application; keep ABI and ownership rules aligned with the C# interop layer.
+
 use std::{
     ffi::{CStr, CString, c_char},
     io::SeekFrom,
@@ -322,6 +324,7 @@ fn app(state: AppState) -> Router {
 
 /// Starts the in-process librqbit torrent engine and HTTP byte-range server.
 #[unsafe(no_mangle)]
+/// <summary>Starts the local torrent HTTP server and returns its bound port through the C ABI.</summary>
 pub unsafe extern "C" fn streamio_torrent_bridge_start(
     config_dir: *const c_char,
     cache_dir: *const c_char,
@@ -408,6 +411,7 @@ pub extern "C" fn streamio_torrent_bridge_stop() -> i32 {
 }
 
 #[unsafe(no_mangle)]
+/// <summary>Copies the most recent bridge error into the caller-provided buffer.</summary>
 pub unsafe extern "C" fn streamio_torrent_bridge_last_error(buffer: *mut u8, capacity: usize) -> usize {
     let message = match error_slot().lock() {
         Ok(value) => value.as_bytes().to_vec(),

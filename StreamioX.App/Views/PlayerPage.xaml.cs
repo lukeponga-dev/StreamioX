@@ -1,3 +1,5 @@
+// Purpose: Connects the PlayerPage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using StreamioX.App.Models;
 using StreamioX.App.Helpers;
 using StreamioX.App.Services;
@@ -108,6 +110,7 @@ namespace StreamioX.App.Views
             await PlayWithFFmpegAsync(streamUrl, title, seriesTitle, requestHeaders);
         }
 
+        /// <summary>Creates and starts the FFmpeg-backed media item while wiring playback events and error reporting.</summary>
         private async Task PlayWithFFmpegAsync(string streamUrl, string title, string? seriesTitle = null,
             System.Collections.Generic.IReadOnlyDictionary<string, string>? requestHeaders = null)
         {
@@ -307,6 +310,7 @@ namespace StreamioX.App.Views
         private static string FormatPlaybackTime(TimeSpan time) =>
             time.TotalHours >= 1 ? time.ToString(@"h\:mm\:ss") : time.ToString(@"m\:ss");
 
+        /// <summary>Applies the saved resume position once the media timeline becomes seekable.</summary>
         private void TryApplyResumePosition(MediaPlaybackSession session)
         {
             if (_resumeApplied)
@@ -338,6 +342,7 @@ namespace StreamioX.App.Views
             }
         }
 
+        /// <summary>Persists the current playback position so the title can appear in continue watching.</summary>
         private async Task SaveProgressAsync()
         {
             var request = _playbackRequest;
@@ -385,6 +390,7 @@ namespace StreamioX.App.Views
                 LoadingOverlay.Visibility = Visibility.Collapsed;
         }
 
+        /// <summary>Captures media-engine failures and displays a useful playback error to the user.</summary>
         private void MediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
         {
             var error = $"Playback failed (0x{args.ExtendedErrorCode.HResult:X8}): {args.ErrorMessage}";
@@ -500,6 +506,7 @@ namespace StreamioX.App.Views
             ShowOsd();
         }
 
+        /// <summary>Maps remote-control and keyboard input to playback, seeking, and on-screen controls.</summary>
         private void PlayerPage_KeyDown(object sender, Windows.UI.Xaml.Input.KeyRoutedEventArgs e)
         {
             // X is a true OSD toggle. Do not reveal the overlay before evaluating it.

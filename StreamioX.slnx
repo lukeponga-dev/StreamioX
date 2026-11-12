@@ -1,3 +1,4 @@
+<!-- Purpose: Groups the StreamioX projects and build configurations for Visual Studio. -->
 <Solution>
   <Configurations>
     <Platform Name="arm64" />

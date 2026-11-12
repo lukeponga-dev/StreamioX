@@ -1,4 +1,6 @@
-﻿using System;
+// Purpose: Provides shared FocusHelper utility behavior used by multiple screens or controls.
+
+using System;
 using System.Collections.Generic;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -13,6 +15,7 @@ namespace StreamioX.App.Helpers
         private static readonly Dictionary<Type, string>
             LastFocusedElements = new Dictionary<Type, string>();
 
+        /// <summary>Remembers the focused control so it can be restored when the page becomes active again.</summary>
         public static void Capture(Page page, Control fallback)
         {
             var focusedElement =
@@ -72,6 +75,7 @@ namespace StreamioX.App.Helpers
             };
         }
 
+        /// <summary>Restores the previously focused control, falling back to the supplied default when needed.</summary>
         public static void Restore(Page page, Control fallback)
         {
             if (LastFocusedElements.TryGetValue(

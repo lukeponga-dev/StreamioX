@@ -1,4 +1,4 @@
-﻿// Layout/XboxConstants.cs
+// Layout/XboxConstants.cs
 using Windows.UI.Xaml;
 
 namespace StreamioX.App.Layout

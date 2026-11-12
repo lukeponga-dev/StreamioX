@@ -1,4 +1,6 @@
-﻿using System;
+// Purpose: Defines NavigationService navigation contracts and route resolution for the application.
+
+using System;
 using System.Collections.Generic;
 using Windows.UI.Xaml.Controls;
 using StreamioX.App.Views;
@@ -29,6 +31,7 @@ namespace StreamioX.App.Navigation
                           ?? throw new ArgumentNullException(nameof(shellFrame));
         }
 
+        /// <summary>Resolves a route to its page type and navigates the shell frame with optional navigation data.</summary>
         public bool NavigateTo(
             NavigationRoute route,
             object? parameter = null)
@@ -45,6 +48,7 @@ namespace StreamioX.App.Navigation
             return _shellFrame.Navigate(pageType, parameter);
         }
 
+        /// <summary>Navigates to the previous page when the frame has a back entry.</summary>
         public bool GoBack()
         {
             if (_shellFrame == null || !_shellFrame.CanGoBack)

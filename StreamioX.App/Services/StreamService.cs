@@ -1,3 +1,5 @@
+// Purpose: Implements StreamService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -43,6 +45,7 @@ namespace StreamioX.App.Services
                 }).ConfigureAwait(false);
         }
 
+        /// <summary>Queries each eligible stream provider and normalizes its returned sources.</summary>
         public async Task<IReadOnlyList<StreamSource>> GetFromInstalledAddonsAsync(
             string type,
             string id,

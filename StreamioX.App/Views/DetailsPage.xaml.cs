@@ -1,3 +1,5 @@
+// Purpose: Connects the DetailsPage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using System;
 using System.Collections.Specialized;
 using StreamioX.App.Models;

@@ -1,3 +1,5 @@
+// Purpose: Connects the SearchPage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using System;
 using System.Collections.Generic;
 using Windows.Storage;
@@ -83,6 +85,7 @@ namespace StreamioX.App.Views
             }
         }
 
+        /// <summary>Runs the current query, updates recent searches, and renders the returned media results.</summary>
         private async void SearchButton_Click(object sender, RoutedEventArgs e) => await RunSearchAsync();
 
         private async void SearchInput_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -90,6 +93,7 @@ namespace StreamioX.App.Views
             if (e.Key == VirtualKey.Enter) { e.Handled = true; _searchTimer.Stop(); await RunSearchAsync(); }
         }
 
+        /// <summary>Runs the current query, updates recent searches, and renders the returned media results.</summary>
         private async System.Threading.Tasks.Task RunSearchAsync()
         {
             var query = SearchInput.Text?.Trim();

@@ -1,3 +1,5 @@
+// Purpose: Implements StremioClient application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Net.Http;
 using System.Text.Json;

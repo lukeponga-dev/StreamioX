@@ -1,3 +1,5 @@
+// Purpose: Connects the MainPage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using System;
 using System.Threading.Tasks;
 using StreamioX.App.Navigation;
@@ -54,6 +56,7 @@ namespace StreamioX.App.Views
                 HomeNavButton.Focus(FocusState.Programmatic);
         }
 
+        /// <summary>Synchronizes top-level navigation selection and player chrome with the page now displayed.</summary>
         private void ContentFrame_Navigated(object sender, Windows.UI.Xaml.Navigation.NavigationEventArgs e)
         {
             UpdatePlaybackChrome(e.Content is PlayerPage);
@@ -137,6 +140,7 @@ namespace StreamioX.App.Views
             await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, UpdateProfileUi);
         }
 
+        /// <summary>Refreshes the profile menu labels and account actions from the current auth state.</summary>
         private void UpdateProfileUi()
         {
             var displayName = "Sign In";
@@ -181,6 +185,7 @@ namespace StreamioX.App.Views
             }
         }
 
+        /// <summary>Signs out the current account or opens Settings, where the existing Stremio login flows live.</summary>
         private async void ProfileSignIn_Click(object sender, RoutedEventArgs e)
         {
             if (_authService.IsLoggedIn)

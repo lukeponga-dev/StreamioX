@@ -1,3 +1,5 @@
+// Purpose: Implements AddonService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -61,6 +63,7 @@ namespace StreamioX.App.Services
             await SyncAllAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        /// <summary>Fetches and validates an add-on manifest before adding the provider to local storage.</summary>
         public async Task<InstalledAddon?> InstallFromManifestUrlAsync(
             string manifestUrl, CancellationToken cancellationToken = default)
         {
@@ -86,6 +89,7 @@ namespace StreamioX.App.Services
             finally { _mutationLock.Release(); }
         }
 
+        /// <summary>Refreshes installed add-on manifests and reports per-provider synchronization outcomes.</summary>
         public async Task<AddonSyncSummary> SyncAllAsync(CancellationToken cancellationToken = default)
         {
             var summary = new AddonSyncSummary();
@@ -177,6 +181,7 @@ namespace StreamioX.App.Services
             contentId == null || addon.IdPrefixes.Count == 0 ||
             addon.IdPrefixes.Any(p => contentId.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
+        /// <summary>Rejects incomplete or unsupported manifests before they can be installed.</summary>
         private static void ValidateManifest(AddonManifest? manifest)
         {
             if (manifest == null) throw new InvalidDataException("The server returned an empty manifest.");
@@ -205,6 +210,7 @@ namespace StreamioX.App.Services
             addon.IsOfficial = manifestUrl.Contains("v3-cinemeta.strem.io", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>Normalizes a manifest address so equivalent add-on URLs have a consistent stored form.</summary>
         private static string NormalizeManifestUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url))

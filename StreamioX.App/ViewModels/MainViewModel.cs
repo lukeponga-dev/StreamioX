@@ -1,3 +1,5 @@
+// Purpose: Owns MainViewModel screen state and user actions, keeping presentation logic separate from the XAML view.
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using StreamioX.App.Navigation;

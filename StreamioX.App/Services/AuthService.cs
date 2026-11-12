@@ -1,3 +1,5 @@
+// Purpose: Implements AuthService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -139,6 +141,7 @@ namespace StreamioX.App.Services
             return Task.CompletedTask;
         }
 
+        /// <summary>Requests a Stremio device-link code for QR or browser-based account sign-in.</summary>
         public async Task<DeviceLinkSession> StartDeviceLinkAsync(CancellationToken cancellationToken = default)
         {
             using var response = await _http.GetAsync(LinkCreateUrl, cancellationToken).ConfigureAwait(false);
@@ -164,6 +167,7 @@ namespace StreamioX.App.Services
             return new DeviceLinkSession { Code = result.Code, LinkUrl = link, QrImageUrl = qr };
         }
 
+        /// <summary>Checks whether the user approved the pending device-link login and stores the returned session.</summary>
         public async Task<bool> PollDeviceLinkAsync(string code, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(code)) return false;
@@ -201,6 +205,7 @@ namespace StreamioX.App.Services
             return true;
         }
 
+        /// <summary>Authenticates with email and password, then persists the resulting account session.</summary>
         public async Task LoginWithEmailAsync(string email, string password, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
@@ -221,6 +226,7 @@ namespace StreamioX.App.Services
             await SyncAfterLoginAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        /// <summary>Validates an existing Stremio auth key and initializes the authenticated session.</summary>
         public async Task LoginWithAuthKeyAsync(string authKey, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(authKey))
@@ -244,6 +250,7 @@ namespace StreamioX.App.Services
             }
         }
 
+        /// <summary>Clears the active session and securely removes persisted credentials.</summary>
         public async Task LogoutAsync(CancellationToken cancellationToken = default)
         {
             if (IsLoggedIn)
@@ -266,6 +273,7 @@ namespace StreamioX.App.Services
             SessionChanged?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>Fetches the latest account profile using the current authentication session.</summary>
         public async Task RefreshUserAsync(CancellationToken cancellationToken = default)
         {
             if (!IsLoggedIn) return;
@@ -279,6 +287,7 @@ namespace StreamioX.App.Services
             SessionChanged?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>Imports the account add-on collection and reconciles it with locally installed providers.</summary>
         public async Task<AddonAccountSyncResult> SyncAddonCollectionAsync(CancellationToken cancellationToken = default)
         {
             if (!IsLoggedIn) throw new InvalidOperationException("Sign in to Stremio before synchronizing account add-ons.");

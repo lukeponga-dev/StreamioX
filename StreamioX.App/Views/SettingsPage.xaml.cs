@@ -1,3 +1,5 @@
+// Purpose: Connects the SettingsPage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using StreamioX.App.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;

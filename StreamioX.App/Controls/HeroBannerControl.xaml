@@ -1,4 +1,5 @@
-﻿<UserControl
+<!-- Purpose: Defines the reusable HeroBannerControl control template and visual states. -->
+<UserControl
     x:Class="StreamioX.App.Controls.HeroBannerControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

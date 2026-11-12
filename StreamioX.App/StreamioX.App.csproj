@@ -1,3 +1,4 @@
+<!-- Purpose: Defines the UWP/MSIX build, NativeAOT, platform, package, and native torrent-bridge settings. -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>

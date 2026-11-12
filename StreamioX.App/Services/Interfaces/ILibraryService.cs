@@ -1,3 +1,5 @@
+// Purpose: Declares the ILibraryService service contract used to keep features independent of concrete implementations. Implements ILibraryService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using StreamioX.App.Models;

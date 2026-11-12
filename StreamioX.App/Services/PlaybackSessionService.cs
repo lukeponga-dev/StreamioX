@@ -1,3 +1,5 @@
+// Purpose: Implements PlaybackSessionService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using Windows.Media.Playback;
 
 namespace StreamioX.App.Services

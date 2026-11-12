@@ -1,4 +1,6 @@
-﻿using Windows.UI.Xaml;
+// Purpose: Implements reusable MediaCardControl.xaml control behavior and interaction handling.
+
+using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
 namespace StreamioX.App.Controls

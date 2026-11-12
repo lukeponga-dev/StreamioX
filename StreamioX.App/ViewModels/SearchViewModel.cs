@@ -1,3 +1,5 @@
+// Purpose: Owns SearchViewModel screen state and user actions, keeping presentation logic separate from the XAML view.
+
 using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;

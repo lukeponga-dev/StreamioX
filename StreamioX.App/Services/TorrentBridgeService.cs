@@ -1,3 +1,5 @@
+// Purpose: Implements TorrentBridgeService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,6 +26,7 @@ namespace StreamioX.App.Services
             return ServerAddress!;
         }
 
+        /// <summary>Converts a torrent-backed source into a local HTTP URL served by the native bridge.</summary>
         public async Task<string> GetStreamUrlAsync(
             StreamSource stream,
             CancellationToken cancellationToken = default)
@@ -92,6 +95,7 @@ namespace StreamioX.App.Services
                 () => Task.FromResult(resolvedUrl)).ConfigureAwait(false);
         }
 
+        /// <summary>Normalizes supported torrent info-hash representations to a 40-character hexadecimal value.</summary>
         private static string? NormalizeInfoHash(string? value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -135,6 +139,7 @@ namespace StreamioX.App.Services
             return output.Length == 40 ? output.ToString() : null;
         }
 
+        /// <summary>Extracts and validates the torrent hash and tracker parameters from a magnet URI.</summary>
         private static bool TryReadMagnet(
             string? value,
             out string? infoHash,
@@ -172,6 +177,7 @@ namespace StreamioX.App.Services
             return infoHash != null;
         }
 
+        /// <summary>Starts the native bridge once and waits until its local HTTP endpoint is ready.</summary>
         private async Task EnsureStartedAsync(CancellationToken cancellationToken)
         {
             if (_port.HasValue)
@@ -223,6 +229,7 @@ namespace StreamioX.App.Services
             }
         }
 
+        /// <summary>Stops the native torrent server and releases its managed bridge state.</summary>
         public async Task StopAsync()
         {
             await _startGate.WaitAsync().ConfigureAwait(false);

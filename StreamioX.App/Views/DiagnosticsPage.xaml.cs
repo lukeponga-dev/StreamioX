@@ -1,3 +1,5 @@
+// Purpose: Connects the DiagnosticsPage.xaml page to its view model, navigation, focus behavior, and page lifecycle.
+
 using StreamioX.App.Models;
 using StreamioX.App.Services;
 using System;

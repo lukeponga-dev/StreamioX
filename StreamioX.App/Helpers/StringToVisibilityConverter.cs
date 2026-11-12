@@ -1,4 +1,6 @@
-﻿using System;
+// Purpose: Provides shared StringToVisibilityConverter utility behavior used by multiple screens or controls.
+
+using System;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Data;
 

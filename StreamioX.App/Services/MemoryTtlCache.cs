@@ -1,3 +1,5 @@
+// Purpose: Implements MemoryTtlCache application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Collections.Concurrent;
 using System.Linq;

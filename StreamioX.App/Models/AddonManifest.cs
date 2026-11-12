@@ -1,3 +1,5 @@
+// Purpose: Defines AddonManifest data exchanged between app features and external Stremio-compatible services.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;

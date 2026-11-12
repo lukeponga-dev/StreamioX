@@ -1,3 +1,4 @@
+<!-- Purpose: Defines the DetailsPage page layout and controller-focused visual structure. -->
 <Page
     x:Class="StreamioX.App.Views.DetailsPage"
     x:Name="PageRoot"

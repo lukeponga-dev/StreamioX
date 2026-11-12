@@ -1,3 +1,4 @@
+<!-- Purpose: Defines the SearchPage page layout and controller-focused visual structure. -->
 <Page
     x:Class="StreamioX.App.Views.SearchPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

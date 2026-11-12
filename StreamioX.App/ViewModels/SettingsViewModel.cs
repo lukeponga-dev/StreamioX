@@ -1,3 +1,5 @@
+// Purpose: Owns SettingsViewModel screen state and user actions, keeping presentation logic separate from the XAML view.
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -117,9 +119,11 @@ namespace StreamioX.App.ViewModels
         }
 
         [RelayCommand]
+        /// <summary>Runs the QR or browser device-link flow, polls approval, and refreshes account UI state.</summary>
         private Task StartQrLoginAsync() => RunDeviceLinkLoginAsync(openBrowser: false);
 
         [RelayCommand]
+        /// <summary>Runs the QR or browser device-link flow, polls approval, and refreshes account UI state.</summary>
         private Task LoginWithFacebookAsync() => RunDeviceLinkLoginAsync(openBrowser: true);
 
         // Facebook authentication is completed on Stremio's official sign-in page.
@@ -270,6 +274,7 @@ namespace StreamioX.App.ViewModels
         }
 
         [RelayCommand]
+        /// <summary>Starts the local playback bridge and updates the connection status shown in settings.</summary>
         private async Task ConnectPlaybackServerAsync()
         {
             var address = PlaybackServerAddress?.Trim();

@@ -1,3 +1,5 @@
+// Purpose: Owns DiscoverViewModel screen state and user actions, keeping presentation logic separate from the XAML view.
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.ObjectModel;
@@ -52,6 +54,7 @@ namespace StreamioX.App.ViewModels
             _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
         }
 
+        /// <summary>Loads movie and series catalogs and updates the screen loading, empty, and error state.</summary>
         public async Task LoadCatalogAsync()
         {
             if (IsLoading) return;
@@ -106,6 +109,7 @@ namespace StreamioX.App.ViewModels
             }
         }
 
+        /// <summary>Requests a catalog for one content type while respecting the active cancellation token.</summary>
         private async Task<System.Collections.Generic.IReadOnlyList<Movie>> LoadCatalogTypeAsync(
             string type, CancellationToken cancellationToken)
         {

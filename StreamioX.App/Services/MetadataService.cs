@@ -1,3 +1,5 @@
+// Purpose: Implements MetadataService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Threading;
 using System.Threading.Tasks;

@@ -1,4 +1,6 @@
-﻿using Windows.UI.Xaml.Controls;
+// Purpose: Defines INavigationService navigation contracts and route resolution for the application.
+
+using Windows.UI.Xaml.Controls;
 
 namespace StreamioX.App.Navigation
 {

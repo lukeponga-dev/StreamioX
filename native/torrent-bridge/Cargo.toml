@@ -1,3 +1,5 @@
+# Purpose: Declares the native torrent bridge crate, build settings, and Rust dependencies.
+
 [package]
 name = "streamio-x-torrent-bridge"
 version = "0.1.0"

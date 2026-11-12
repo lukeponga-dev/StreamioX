@@ -1,3 +1,5 @@
+// Purpose: Declares the IStreamService service contract used to keep features independent of concrete implementations. Implements IStreamService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;

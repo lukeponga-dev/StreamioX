@@ -1,3 +1,5 @@
+// Purpose: Implements LibraryService application behavior and coordinates the related Stremio, playback, or platform APIs.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -66,6 +68,7 @@ namespace StreamioX.App.Services
             finally { _gate.Release(); }
         }
 
+        /// <summary>Stores the latest playback position and duration for resume-watching behavior.</summary>
         public async Task UpdateProgressAsync(string type, string id, double positionSeconds, double durationSeconds,
             string? episodeId = null, Movie? movie = null)
         {
@@ -109,6 +112,7 @@ namespace StreamioX.App.Services
             string.Equals(entry.Movie?.Id, id, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(entry.Movie?.Type ?? "movie", type, StringComparison.OrdinalIgnoreCase);
 
+        /// <summary>Reads the persisted library entries from the app local data folder.</summary>
         private static async Task<List<LibraryEntry>> LoadAsync()
         {
             try
@@ -122,6 +126,7 @@ namespace StreamioX.App.Services
             catch (FileNotFoundException) { return new List<LibraryEntry>(); }
         }
 
+        /// <summary>Writes the updated library snapshot to local storage.</summary>
         private static async Task SaveFileAsync(List<LibraryEntry> entries)
         {
             var path = Path.Combine(ApplicationData.Current.LocalFolder.Path, FileName);

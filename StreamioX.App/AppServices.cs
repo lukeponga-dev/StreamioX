@@ -1,3 +1,5 @@
+// Purpose: Composes the dependency-injection container and registers app services, view models, and navigation.
+
 using Microsoft.Extensions.DependencyInjection;
 using StreamioX.App.Navigation;
 using StreamioX.App.Services;
@@ -51,6 +53,7 @@ namespace StreamioX.App
         public static IServiceProvider Provider =>
             _provider ?? throw new InvalidOperationException("Services not configured. Call Configure() first.");
 
+        /// <summary>Registers application services and view models with the dependency-injection container.</summary>
         public static void Configure()
         {
             if (_provider != null) return;
