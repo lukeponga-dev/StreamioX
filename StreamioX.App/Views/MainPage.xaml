@@ -144,6 +144,7 @@
                                     <TextBlock Text="STREAMIOX PROFILE" Foreground="#A49ABF"
                                                FontSize="10" CharacterSpacing="100"/>
                                     <Rectangle Height="1" Fill="#302A42"/>
+                                    <Button x:Name="ProfileSignInButton" Content="Sign In" HorizontalAlignment="Stretch" Click="ProfileSignIn_Click"/>
                                     <Button Content="My Library" HorizontalAlignment="Stretch" Click="ProfileLibrary_Click"/>
                                     <Button Content="Add-ons" HorizontalAlignment="Stretch" Click="ProfileAddons_Click"/>
                                     <Button Content="Settings" HorizontalAlignment="Stretch" Click="ProfileSettings_Click"/>

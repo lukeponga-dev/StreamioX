@@ -160,6 +160,7 @@ namespace StreamioX.App.Views
 
             ProfileNameText.Text = displayName;
             FlyoutProfileNameText.Text = displayName;
+            ProfileSignInButton.Content = _authService.IsLoggedIn ? "Sign Out" : "Sign In";
         }
 
         private void System_BackRequested(object sender, BackRequestedEventArgs e)
@@ -178,6 +179,19 @@ namespace StreamioX.App.Views
                 case "Library": ViewModel.NavigateToLibraryCommand.Execute(null); break;
                 case "Addons": ViewModel.NavigateToAddonsCommand.Execute(null); break;
             }
+        }
+
+        private async void ProfileSignIn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_authService.IsLoggedIn)
+            {
+                await _authService.LogoutAsync();
+                UpdateProfileUi();
+                return;
+            }
+
+            // SettingsPage contains the existing Stremio device-link and account sign-in UI.
+            ViewModel.NavigateToSettingsCommand.Execute(null);
         }
 
         private void ProfileLibrary_Click(object sender, RoutedEventArgs e) =>
@@ -199,7 +213,7 @@ namespace StreamioX.App.Views
                 Title = "About StreamioX",
                 Content = "StreamioX is an Xbox-first media discovery and playback client. Catalogs, metadata and streams are supplied by your installed Stremio-compatible add-ons.",
                 CloseButtonText = "Close",
-                XamlRoot = Content.XamlRoot
+                XamlRoot = this.XamlRoot
             };
             await dialog.ShowAsync();
         }
