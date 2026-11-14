@@ -19,6 +19,7 @@ namespace StreamioX.App.ViewModels
         private readonly ICatalogService _catalogService;
         private readonly IAddonService _addonService;
         private CancellationTokenSource? _loadCts;
+        private int _loadGeneration;
         private ObservableCollection<Movie> _movies = new();
         private bool _isLoading;
         private string? _errorMessage;
@@ -54,15 +55,19 @@ namespace StreamioX.App.ViewModels
             _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
         }
 
-        /// <summary>Loads movie and series catalogs and updates the screen loading, empty, and error state.</summary>
-        public async Task LoadCatalogAsync()
+        /// <summary>Loads movie and series catalogs, optionally replacing an in-progress request.</summary>
+        public async Task LoadCatalogAsync(bool forceRefresh = false)
         {
-            if (IsLoading) return;
+            if (IsLoading && !forceRefresh)
+                return;
 
+            // A refresh supersedes the previous request. The generation check below
+            // prevents a late response from an older request replacing newer results.
             _loadCts?.Cancel();
-            _loadCts?.Dispose();
-            _loadCts = new CancellationTokenSource(TimeSpan.FromSeconds(35));
-            var token = _loadCts.Token;
+            var loadCts = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+            _loadCts = loadCts;
+            var generation = ++_loadGeneration;
+            var token = loadCts.Token;
 
             IsLoading = true;
             ErrorMessage = null;
@@ -70,11 +75,14 @@ namespace StreamioX.App.ViewModels
 
             try
             {
-                // Cinemeta is the app's default metadata catalog. It must work even
-                // when the user has not installed any third-party catalog add-ons.
+                // Cinemeta is the default metadata catalog and should work even when
+                // the user has not installed any third-party catalog add-ons.
                 var movieTask = LoadCatalogTypeAsync("movie", token);
                 var seriesTask = LoadCatalogTypeAsync("series", token);
                 await Task.WhenAll(movieTask, seriesTask).ConfigureAwait(true);
+
+                if (generation != _loadGeneration)
+                    return;
 
                 var combined = movieTask.Result
                     .Concat(seriesTask.Result)
@@ -85,31 +93,59 @@ namespace StreamioX.App.ViewModels
                     .ToList();
 
                 if (combined.Count == 0)
-                    throw new InvalidOperationException("Cinemeta and your installed catalog add-ons returned no titles.");
+                    throw new InvalidOperationException(
+                        "Cinemeta and your installed catalog add-ons returned no titles.");
 
                 Movies = new ObservableCollection<Movie>(combined);
-                var movieCount = Movies.Count(item => string.Equals(item.Type, "movie", StringComparison.OrdinalIgnoreCase));
-                var seriesCount = Movies.Count(item => string.Equals(item.Type, "series", StringComparison.OrdinalIgnoreCase));
+                var movieCount = Movies.Count(item =>
+                    string.Equals(item.Type, "movie", StringComparison.OrdinalIgnoreCase));
+                var seriesCount = Movies.Count(item =>
+                    string.Equals(item.Type, "series", StringComparison.OrdinalIgnoreCase));
                 StatusMessage = $"{movieCount} movies · {seriesCount} series · {Movies.Count} titles";
             }
             catch (OperationCanceledException)
             {
+                if (generation != _loadGeneration)
+                    return;
+
                 StatusMessage = "Catalog loading timed out or was cancelled. Try again.";
                 ErrorMessage = "The catalog request took too long. Check your connection and retry.";
             }
             catch (Exception ex)
             {
+                if (generation != _loadGeneration)
+                    return;
+
+                System.Diagnostics.Debug.WriteLine($"[StreamioX] Discover catalog failed: {ex}");
                 StatusMessage = "Catalog unavailable";
                 ErrorMessage = "Couldn't load the catalog. " + ex.Message;
                 Movies = new ObservableCollection<Movie>();
             }
             finally
             {
-                IsLoading = false;
+                loadCts.Dispose();
+                if (generation == _loadGeneration)
+                {
+                    _loadCts = null;
+                    IsLoading = false;
+                }
             }
         }
 
-        /// <summary>Requests a catalog for one content type while respecting the active cancellation token.</summary>
+        /// <summary>Cancels the active catalog request when Discover is left.</summary>
+        public void CancelLoad()
+        {
+            if (!IsLoading)
+                return;
+
+            ++_loadGeneration;
+            _loadCts?.Cancel();
+            _loadCts = null;
+            IsLoading = false;
+            StatusMessage = "Catalog loading paused.";
+        }
+
+        /// <summary>Requests a catalog for one content type and falls back to installed providers.</summary>
         private async Task<System.Collections.Generic.IReadOnlyList<Movie>> LoadCatalogTypeAsync(
             string type, CancellationToken cancellationToken)
         {
@@ -127,7 +163,8 @@ namespace StreamioX.App.ViewModels
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[StreamioX] Discover Cinemeta {type} failed: {ex}");
+                System.Diagnostics.Debug.WriteLine(
+                    $"[StreamioX] Discover Cinemeta {type} failed: {ex}");
             }
 
             // Third-party catalog add-ons remain supported as a fallback.
@@ -142,7 +179,8 @@ namespace StreamioX.App.ViewModels
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[StreamioX] Discover installed {type} catalogs failed: {ex}");
+                System.Diagnostics.Debug.WriteLine(
+                    $"[StreamioX] Discover installed {type} catalogs failed: {ex}");
                 return Array.Empty<Movie>();
             }
         }

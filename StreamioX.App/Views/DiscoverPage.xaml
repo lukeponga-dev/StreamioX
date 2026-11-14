@@ -241,7 +241,7 @@
                         <StackPanel Width="166" Spacing="8">
                             <Border Width="166" Height="240" CornerRadius="8"
                                     Background="#151A26">
-                                <Image Source="{x:Bind PosterUrl, Mode=OneWay}"
+                                <Image Source="{x:Bind PosterUrl, Mode=OneTime}"
                                        Stretch="UniformToFill" />
                             </Border>
                             <TextBlock Text="{x:Bind Title}" FontSize="13"

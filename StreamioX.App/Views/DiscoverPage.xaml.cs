@@ -20,6 +20,8 @@ namespace StreamioX.App.Views
         private string _selectedGenre = "All";
         private string _selectedType = "All";
         private bool _isRenderingFilters;
+        private Button? _selectedTypeButton;
+        private Button? _selectedGenreButton;
 
         private static readonly SolidColorBrush ActiveBackground =
             new SolidColorBrush(Color.FromArgb(255, 91, 92, 230));
@@ -67,6 +69,7 @@ namespace StreamioX.App.Views
         protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
         {
             FocusHelper.Capture(this, CatalogGrid);
+            ViewModel.CancelLoad();
             base.OnNavigatingFrom(e);
         }
 
@@ -100,14 +103,14 @@ namespace StreamioX.App.Views
             _typeAllButton?.Focus(FocusState.Programmatic);
         }
 
-        private void RetryButton_Click(object sender, RoutedEventArgs e)
+        private async void RetryButton_Click(object sender, RoutedEventArgs e)
         {
-            _ = ReloadAsync();
+            await ReloadAsync();
         }
 
         private async System.Threading.Tasks.Task ReloadAsync()
         {
-            await ViewModel.LoadCatalogAsync();
+            await ViewModel.LoadCatalogAsync(forceRefresh: true);
             RenderContentTypes();
             RenderGenres();
             UpdateResults();
@@ -124,6 +127,8 @@ namespace StreamioX.App.Views
                 () => ChangeType("movie"));
             var seriesButton = AddFilterChip(ContentTypePanel, "Series", _selectedType,
                 () => ChangeType("series"));
+            _selectedTypeButton = _selectedType == "movie" ? moviesButton
+                : _selectedType == "series" ? seriesButton : _typeAllButton;
 
             RefreshButton.XYFocusDown = _typeAllButton;
             _typeAllButton.XYFocusUp = RefreshButton;
@@ -151,6 +156,7 @@ namespace StreamioX.App.Views
             RenderGenres();
             UpdateResults();
             UpdateCountSummary();
+            _selectedTypeButton?.Focus(FocusState.Programmatic);
         }
 
         /// <summary>Builds genre filter chips from the currently available content and selected type.</summary>
@@ -176,11 +182,14 @@ namespace StreamioX.App.Views
                         RenderGenres();
                         UpdateResults();
                         UpdateCountSummary();
+                        _selectedGenreButton?.Focus(FocusState.Programmatic);
                     });
                 genreButton.XYFocusUp = _typeAllButton;
                 genreButton.XYFocusDown = CatalogGrid;
                 genreButtons.Add(genreButton);
             }
+            _selectedGenreButton = genreButtons.FirstOrDefault(button =>
+                string.Equals(button.Content?.ToString(), _selectedGenre, StringComparison.OrdinalIgnoreCase));
             for (var i = 0; i < genreButtons.Count; i++)
             {
                 genreButtons[i].XYFocusLeft = genreButtons[Math.Max(0, i - 1)];
@@ -240,6 +249,10 @@ namespace StreamioX.App.Views
                 ? typeTitle
                 : $"{_selectedGenre} {(typeTitle == "All titles" ? "titles" : typeTitle.ToLowerInvariant())}";
             CatalogGrid.ItemsSource = visible;
+            CatalogGrid.Visibility = visible.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            EmptyStateText.Text = ViewModel.ErrorMessage != null
+                ? "The catalog could not be loaded. Check your connection and select Refresh."
+                : "No titles match this filter. Choose another type or genre.";
             EmptyStateText.Visibility = visible.Count == 0 && !ViewModel.IsLoading
                 ? Visibility.Visible
                 : Visibility.Collapsed;
