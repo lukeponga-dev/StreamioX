@@ -70,15 +70,24 @@ namespace StreamioX.App.Services
             var normalizedUrl = NormalizeManifestUrl(manifestUrl);
             var manifest = await _client.GetFromJsonAsync<AddonManifest>(normalizedUrl, cancellationToken)
                 .ConfigureAwait(false);
+            return await InstallFromManifestAsync(normalizedUrl, manifest!, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>Installs a manifest already supplied by the authenticated Stremio account response.</summary>
+        public async Task<InstalledAddon?> InstallFromManifestAsync(
+            string manifestUrl, AddonManifest manifest, CancellationToken cancellationToken = default)
+        {
+            var normalizedUrl = NormalizeManifestUrl(manifestUrl);
             ValidateManifest(manifest);
 
             await _mutationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 var existing = _addons.FirstOrDefault(a =>
-                    string.Equals(a.Id, manifest!.Id, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(a.Id, manifest.Id, StringComparison.OrdinalIgnoreCase));
                 var addon = existing ?? new InstalledAddon();
-                ApplyManifest(addon, manifest!, normalizedUrl);
+                ApplyManifest(addon, manifest, normalizedUrl);
                 addon.LastSyncedAt = DateTimeOffset.UtcNow;
                 addon.LastSyncError = null;
                 addon.SyncState = "Synced";

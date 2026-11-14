@@ -102,7 +102,8 @@ namespace StreamioX.App.Helpers
         public static void Restore(Page page, Control fallback)
         {
             if (LastFocusedElements.TryGetValue(
-                    page.GetType(), out string elementName))
+                    page.GetType(), out var elementName) &&
+                !string.IsNullOrWhiteSpace(elementName))
             {
                 var control =
                     page.FindName(elementName) as Control;

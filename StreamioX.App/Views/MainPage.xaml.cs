@@ -167,7 +167,7 @@ namespace StreamioX.App.Views
             ProfileSignInButton.Content = _authService.IsLoggedIn ? "Sign Out" : "Sign In";
         }
 
-        private void System_BackRequested(object sender, BackRequestedEventArgs e)
+        private void System_BackRequested(object? sender, BackRequestedEventArgs e)
         {
             if (ContentFrame.CanGoBack) { e.Handled = true; ContentFrame.GoBack(); }
         }

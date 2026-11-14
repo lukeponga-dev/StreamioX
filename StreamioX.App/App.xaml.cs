@@ -28,7 +28,7 @@ namespace StreamioX.App
         {
             // Defer media-pipeline and add-on initialization until those features are
             // actually opened. Starting them here competes with first-page rendering.
-            Frame rootFrame = Window.Current.Content as Frame;
+            Frame? rootFrame = Window.Current.Content as Frame;
 
             if (rootFrame == null)
             {
@@ -53,7 +53,7 @@ namespace StreamioX.App
             // TorrentBridgeService starts on demand when a torrent stream is selected.
         }
 
-        private void OnResuming(object sender, object e)
+        private void OnResuming(object? sender, object e)
         {
             // Playback starts the torrent bridge on demand; resume needs no background work.
         }

@@ -16,9 +16,9 @@ namespace StreamioX.App.ViewModels
         private readonly ILibraryService _library;
         private readonly INavigationService _navigation;
 
-        [ObservableProperty] private ObservableCollection<LibraryEntry> entries = new();
-        [ObservableProperty] private bool isLoading;
-        [ObservableProperty] private string status = "Your saved titles will appear here.";
+        [ObservableProperty] public partial ObservableCollection<LibraryEntry> Entries { get; set; } = new();
+        [ObservableProperty] public partial bool IsLoading { get; set; }
+        [ObservableProperty] public partial string Status { get; set; } = "Your saved titles will appear here.";
         public bool HasEntries => Entries.Count > 0;
 
         public LibraryViewModel(ILibraryService library, INavigationService navigation)

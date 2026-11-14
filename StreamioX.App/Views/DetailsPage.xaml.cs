@@ -27,8 +27,6 @@ namespace StreamioX.App.Views
             FocusHelper.AttachXboxFocus(ResumeButton);
             ViewModel = AppServices.GetRequiredService<DetailsViewModel>();
             DataContext = ViewModel;
-            ViewModel.Episodes.CollectionChanged += ContentRows_CollectionChanged;
-            ViewModel.Streams.CollectionChanged += ContentRows_CollectionChanged;
         }
 
         private void ContentRows_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -158,6 +156,10 @@ namespace StreamioX.App.Views
         {
             base.OnNavigatedTo(e);
             _movieStreamFocusApplied = false;
+            ViewModel.Episodes.CollectionChanged -= ContentRows_CollectionChanged;
+            ViewModel.Streams.CollectionChanged -= ContentRows_CollectionChanged;
+            ViewModel.Episodes.CollectionChanged += ContentRows_CollectionChanged;
+            ViewModel.Streams.CollectionChanged += ContentRows_CollectionChanged;
 
             if (e.Parameter is Movie selectedMovie)
             {
@@ -186,6 +188,14 @@ namespace StreamioX.App.Views
                     BackdropImage.Source = new BitmapImage(backdropUri);
                 }
             }
+        }
+
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            ViewModel.Episodes.CollectionChanged -= ContentRows_CollectionChanged;
+            ViewModel.Streams.CollectionChanged -= ContentRows_CollectionChanged;
+            ViewModel.CancelPendingRequests();
+            base.OnNavigatedFrom(e);
         }
     }
 }

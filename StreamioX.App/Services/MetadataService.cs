@@ -34,7 +34,8 @@ namespace StreamioX.App.Services
                     var response = await MemoryTtlCache.GetOrCreateAsync(
                         "addon-meta:" + url,
                         MetadataTtl,
-                        async () => await _client.GetFromJsonAsync<MetaResponse>(url, cancellationToken).ConfigureAwait(false))
+                        sharedToken => _client.GetFromJsonAsync<MetaResponse>(url, sharedToken),
+                        cancellationToken)
                         .ConfigureAwait(false);
 
                     if (response?.Meta != null)

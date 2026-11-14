@@ -6,7 +6,7 @@ using Windows.UI.Xaml.Data;
 
 namespace StreamioX.App.Helpers
 {
-    public sealed class StringToVisibilityConverter : IValueConverter
+    public sealed partial class StringToVisibilityConverter : IValueConverter
     {
         public object Convert(
             object value,
@@ -25,7 +25,9 @@ namespace StreamioX.App.Helpers
             object parameter,
             string language)
         {
-            throw new NotImplementedException();
+            // This converter is intentionally one-way; returning UnsetValue is
+            // safer than throwing if a binding is ever configured as TwoWay.
+            return DependencyProperty.UnsetValue;
         }
     }
 }

@@ -39,9 +39,9 @@ namespace StreamioX.App.Services
             return await MemoryTtlCache.GetOrCreateAsync(
                 cacheKey,
                 StreamResponseTtl,
-                async () =>
+                async sharedToken =>
                 {
-                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(sharedToken);
                     timeout.CancelAfter(ProviderTimeout);
                     var response = await _stremioClient
                         .GetFromJsonAsync<StreamResponse>(url, timeout.Token)
@@ -116,12 +116,33 @@ namespace StreamioX.App.Services
             return results.SelectMany(result => result)
                 .Where(stream =>
                 {
-                    var key = !string.IsNullOrWhiteSpace(stream.Url) ? stream.Url.Trim()
-                        : !string.IsNullOrWhiteSpace(stream.InfoHash) ? stream.InfoHash.Trim()
-                        : stream.Title?.Trim() ?? string.Empty;
-                    return key.Length > 0 && seen.Add(key);
+                    var key = StreamSourceIdentity.GetKey(stream);
+                    // A title is descriptive metadata, not a unique source identifier.
+                    // Keep sources without a stable URL/hash instead of collapsing them.
+                    return key == null || seen.Add(key);
                 })
                 .ToArray();
+        }
+    }
+
+    /// <summary>Builds a stable identity only from source data that can distinguish streams.</summary>
+    internal static class StreamSourceIdentity
+    {
+        public static string? GetKey(StreamSource stream)
+        {
+            if (!string.IsNullOrWhiteSpace(stream.InfoHash))
+                return "hash:" + stream.InfoHash.Trim().ToLowerInvariant() + "|file:" +
+                    (stream.FileIdx?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "auto");
+
+            if (Uri.TryCreate(stream.Url, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp ||
+                 uri.Scheme == Uri.UriSchemeHttps ||
+                 string.Equals(uri.Scheme, "magnet", StringComparison.OrdinalIgnoreCase)))
+            {
+                return "url:" + uri.AbsoluteUri;
+            }
+
+            return null;
         }
     }
 }

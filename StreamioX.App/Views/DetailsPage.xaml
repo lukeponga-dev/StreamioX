@@ -65,19 +65,29 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
-                        <Button x:Name="WatchNowButton" Content="▶  Watch Now"
+                        <Button x:Name="WatchNowButton"
                                 Command="{Binding WatchNowCommand}"
                                 Style="{StaticResource PrimaryButtonStyle}"
-                                HorizontalAlignment="Left" MinWidth="176"/>
+                                HorizontalAlignment="Left" MinWidth="176">
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                                <SymbolIcon Symbol="Play" Width="18" Height="18"/>
+                                <TextBlock Text="Watch Now"/>
+                            </StackPanel>
+                        </Button>
                         <Button x:Name="LibraryButton" Content="{Binding LibraryButtonText}"
                                 Command="{Binding ToggleLibraryCommand}"
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 HorizontalAlignment="Left"/>
-                        <Button x:Name="ResumeButton" Content="{Binding ResumeButtonText}"
+                        <Button x:Name="ResumeButton"
                                 Click="ResumeButton_Click"
                                 Visibility="{Binding HasResumeProgress, Converter={StaticResource BoolToVisibilityConverter}}"
                                 Style="{StaticResource SecondaryButtonStyle}"
-                                HorizontalAlignment="Left"/>
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <SymbolIcon Symbol="Play" Width="16" Height="16"/>
+                                <TextBlock Text="{Binding ResumeButtonText}"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <StackPanel Spacing="8" MaxWidth="1000">

@@ -7,17 +7,17 @@ namespace StreamioX.App.ViewModels
 {
     public partial class PlayerViewModel : ObservableObject
     {
-        [ObservableProperty] private string mediaTitle = "Now Playing";
-        [ObservableProperty] private string seriesTitle = "StreamioX";
-        [ObservableProperty] private string? currentStreamUrl;
-        [ObservableProperty] private bool isPlaying;
-        [ObservableProperty] private string? playbackError;
-        [ObservableProperty] private string streamingStatus = "Ready to play";
-        [ObservableProperty] private string currentTime = "00:00";
-        [ObservableProperty] private string totalTime = "00:00";
-        [ObservableProperty] private string remainingTime = "-00:00";
-        [ObservableProperty] private string currentTimeDisplay = "00:00 / 00:00";
-        [ObservableProperty] private double playbackProgress;
+        [ObservableProperty] public partial string MediaTitle { get; set; } = "Now Playing";
+        [ObservableProperty] public partial string SeriesTitle { get; set; } = "StreamioX";
+        [ObservableProperty] public partial string? CurrentStreamUrl { get; set; }
+        [ObservableProperty] public partial bool IsPlaying { get; set; }
+        [ObservableProperty] public partial string? PlaybackError { get; set; }
+        [ObservableProperty] public partial string StreamingStatus { get; set; } = "Ready to play";
+        [ObservableProperty] public partial string CurrentTime { get; set; } = "00:00";
+        [ObservableProperty] public partial string TotalTime { get; set; } = "00:00";
+        [ObservableProperty] public partial string RemainingTime { get; set; } = "-00:00";
+        [ObservableProperty] public partial string CurrentTimeDisplay { get; set; } = "00:00 / 00:00";
+        [ObservableProperty] public partial double PlaybackProgress { get; set; }
 
         /// <summary>Sets the selected stream and display metadata before playback begins.</summary>
         public void LoadStream(string streamUrl, string title, string? series = null)

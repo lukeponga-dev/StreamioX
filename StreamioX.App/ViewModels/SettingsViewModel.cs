@@ -25,71 +25,30 @@ namespace StreamioX.App.ViewModels
         private DispatcherTimer? _telemetryTimer;
         private CancellationTokenSource? _pollCts;
 
-        [ObservableProperty]
-        private string appVersionDisplay = "Version 1.0.0-alpha";
-
-        [ObservableProperty]
-        private string currentMemoryUsage = "—";
-
-        [ObservableProperty]
-        private string systemHardLimit = "—";
-
-        [ObservableProperty]
-        private double memoryPercentage;
-
-        [ObservableProperty]
-        private bool hardwareAccelerationEnabled = true;
-
-        [ObservableProperty]
-        private bool isLoggedIn;
-
-        [ObservableProperty]
-        private string accountLabel = "Not signed in";
-
-        [ObservableProperty]
-        private string? linkCode;
-
-        [ObservableProperty]
-        private string? linkUrl;
-
-        [ObservableProperty]
-        private BitmapImage? qrImage;
-
-        [ObservableProperty]
-        private bool isLinking;
-
-        [ObservableProperty]
-        private string? authStatusMessage;
-
-        [ObservableProperty]
-        public partial string AddonSyncStatus { get; set; } = "Sign in to synchronize your Stremio add-ons across devices.";
-
-        [ObservableProperty]
-        private bool isTorrentServerRunning;
-
-        [ObservableProperty]
-        private string torrentServerAddress = "Not running";
-
-        [ObservableProperty]
-        private string torrentServerStatus = "The local HTTP server is stopped.";
-
-        [ObservableProperty]
-        private string playbackServerAddress = string.Empty;
-
-        [ObservableProperty]
-        private string playbackServerStatus = "Enter a direct media URL from your server.";
-
-        [ObservableProperty]
-        private bool isConnectingToPlaybackServer;
-
-        [ObservableProperty]
-        private string? emailInput;
-
-        [ObservableProperty]
-        private string? passwordInput;
-
-        [ObservableProperty]
-        private string? authKeyInput;
+        // Partial properties allow CsWinRT to generate the required WinRT marshalling
+        // metadata for XAML-bound properties in NativeAOT builds.
+        [ObservableProperty] public partial string AppVersionDisplay { get; set; } = "Version 1.0.0-alpha";
+        [ObservableProperty] public partial string CurrentMemoryUsage { get; set; } = "—";
+        [ObservableProperty] public partial string SystemHardLimit { get; set; } = "—";
+        [ObservableProperty] public partial double MemoryPercentage { get; set; }
+        [ObservableProperty] public partial bool HardwareAccelerationEnabled { get; set; } = true;
+        [ObservableProperty] public partial bool IsLoggedIn { get; set; }
+        [ObservableProperty] public partial string AccountLabel { get; set; } = "Not signed in";
+        [ObservableProperty] public partial string? LinkCode { get; set; }
+        [ObservableProperty] public partial string? LinkUrl { get; set; }
+        [ObservableProperty] public partial BitmapImage? QrImage { get; set; }
+        [ObservableProperty] public partial bool IsLinking { get; set; }
+        [ObservableProperty] public partial string? AuthStatusMessage { get; set; }
+        [ObservableProperty] public partial string AddonSyncStatus { get; set; } = "Sign in to synchronize your Stremio add-ons across devices.";
+        [ObservableProperty] public partial bool IsTorrentServerRunning { get; set; }
+        [ObservableProperty] public partial string TorrentServerAddress { get; set; } = "Not running";
+        [ObservableProperty] public partial string TorrentServerStatus { get; set; } = "The local HTTP server is stopped.";
+        [ObservableProperty] public partial string PlaybackServerAddress { get; set; } = string.Empty;
+        [ObservableProperty] public partial string PlaybackServerStatus { get; set; } = "Enter a direct media URL from your server.";
+        [ObservableProperty] public partial bool IsConnectingToPlaybackServer { get; set; }
+        [ObservableProperty] public partial string? EmailInput { get; set; }
+        [ObservableProperty] public partial string? PasswordInput { get; set; }
+        [ObservableProperty] public partial string? AuthKeyInput { get; set; }
 
         public SettingsViewModel(IAuthService authService, ITorrentBridgeService torrentBridge, INavigationService navigation, HttpClient httpClient)
         {
@@ -132,8 +91,9 @@ namespace StreamioX.App.ViewModels
         private async Task RunDeviceLinkLoginAsync(bool openBrowser)
         {
             _pollCts?.Cancel();
-            _pollCts = new CancellationTokenSource();
-            var token = _pollCts.Token;
+            var pollCts = new CancellationTokenSource();
+            _pollCts = pollCts;
+            var token = pollCts.Token;
 
             IsLinking = true;
             AuthStatusMessage = openBrowser
@@ -185,6 +145,9 @@ namespace StreamioX.App.ViewModels
             finally
             {
                 IsLinking = false;
+                if (ReferenceEquals(_pollCts, pollCts))
+                    _pollCts = null;
+                pollCts.Dispose();
             }
         }
 

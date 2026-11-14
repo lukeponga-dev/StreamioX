@@ -92,7 +92,8 @@ namespace StreamioX.App.Services
             return await MemoryTtlCache.GetOrCreateAsync(
                 cacheKey,
                 TimeSpan.FromSeconds(30),
-                () => Task.FromResult(resolvedUrl)).ConfigureAwait(false);
+                _ => Task.FromResult(resolvedUrl),
+                cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>Normalizes supported torrent info-hash representations to a 40-character hexadecimal value.</summary>

@@ -35,12 +35,13 @@ namespace StreamioX.App.Services
             return await MemoryTtlCache.GetOrCreateAsync(
                 "catalog:" + url,
                 TimeSpan.FromMinutes(3),
-                async () =>
+                async sharedToken =>
                 {
                     var response = await _stremioClient.GetFromJsonAsync<CatalogResponse>(
-                        url, cancellationToken).ConfigureAwait(false);
+                        url, sharedToken).ConfigureAwait(false);
                     return (IReadOnlyList<Movie>)(response?.Metas ?? Array.Empty<Movie>());
-                }).ConfigureAwait(false);
+                },
+                cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>Queries compatible catalog resources across installed add-ons and merges their results.</summary>

@@ -328,10 +328,17 @@ namespace StreamioX.App.Services
 
                     try
                     {
-                        await _addonService.InstallFromManifestUrlAsync(transportUrl, cancellationToken).ConfigureAwait(false);
+                        // The account response already includes the complete manifest. Import it
+                        // directly instead of making a second request to the provider URL.
+                        await _addonService.InstallFromManifestAsync(
+                            transportUrl, descriptor.Manifest, cancellationToken).ConfigureAwait(false);
                         result.Pulled++;
                     }
-                    catch
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception)
                     {
                         result.Failed++;
                     }
@@ -387,6 +394,10 @@ namespace StreamioX.App.Services
             {
                 await _addonService.InitializeAsync(cancellationToken).ConfigureAwait(false);
                 await SyncAddonCollectionAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {

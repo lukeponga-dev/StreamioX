@@ -24,22 +24,32 @@ namespace StreamioX.App.ViewModels
 
         private CancellationTokenSource? _loadCts;
         private CancellationTokenSource? _streamsCts;
+        private CancellationTokenSource? _prefetchCts;
 
-        [ObservableProperty] private Movie? selectedMovie;
-        [ObservableProperty] private ObservableCollection<StreamSource> streams = new();
+        // A request can finish and dispose its CTS while navigation is trying to cancel it.
+        // Treat that narrow race as an already-completed request.
+        private static void CancelIfActive(CancellationTokenSource? source)
+        {
+            try { source?.Cancel(); }
+            catch (ObjectDisposedException) { }
+        }
+
+        // Partial-property generation is WinRT/NativeAOT compatible and keeps
+        // XAML-bound state marshalable when the app is trimmed or AOT compiled.
+        [ObservableProperty] public partial Movie? SelectedMovie { get; set; }
+        [ObservableProperty] public partial ObservableCollection<StreamSource> Streams { get; set; } = new();
         [ObservableProperty] public partial ObservableCollection<string> ProviderStatusLines { get; set; } = new();
-        [ObservableProperty] private ObservableCollection<Video> episodes = new();
-        [ObservableProperty] private Video? selectedEpisode;
-        [ObservableProperty] private bool isLoadingStreams;
-        [ObservableProperty] private bool isLoadingMetadata;
-        [ObservableProperty] private string? errorMessage;
-        [ObservableProperty] private bool isSavedInLibrary;
+        [ObservableProperty] public partial ObservableCollection<Video> Episodes { get; set; } = new();
+        [ObservableProperty] public partial Video? SelectedEpisode { get; set; }
+        [ObservableProperty] public partial bool IsLoadingStreams { get; set; }
+        [ObservableProperty] public partial bool IsLoadingMetadata { get; set; }
+        [ObservableProperty] public partial string? ErrorMessage { get; set; }
+        [ObservableProperty] public partial bool IsSavedInLibrary { get; set; }
         [ObservableProperty] public partial bool HasResumeProgress { get; set; }
         [ObservableProperty] public partial bool IsResumeRequested { get; set; }
         [ObservableProperty] public partial string ResumeButtonText { get; set; } = "Resume Watching";
-        // Partial-property generation is WinRT/NativeAOT compatible.
         [ObservableProperty] public partial bool IsSeries { get; set; }
-        [ObservableProperty] private string libraryButtonText = "＋  Add to Library";
+        [ObservableProperty] public partial string LibraryButtonText { get; set; } = "＋  Add to Library";
         private LibraryEntry? _playbackEntry;
 
         // Flatten nested metadata into bindable page properties. This avoids UWP
@@ -77,16 +87,22 @@ namespace StreamioX.App.ViewModels
         /// <summary>Loads full metadata, library state, and available streams for the selected media item.</summary>
         public async Task InitializeAsync(Movie movie)
         {
-            _loadCts?.Cancel();
-            _loadCts = new CancellationTokenSource();
-            var token = _loadCts.Token;
+            CancelIfActive(_loadCts);
+            CancelIfActive(_streamsCts);
+            CancelIfActive(_prefetchCts);
+            var loadCts = new CancellationTokenSource();
+            _loadCts = loadCts;
+            var token = loadCts.Token;
 
             movie.Type ??= "movie";
             IsLoadingMetadata = true;
-            SelectedMovie = movie;
-            IsSeries = string.Equals(movie.Type, "series", StringComparison.OrdinalIgnoreCase);
-            IsSavedInLibrary = await _libraryService.IsSavedAsync(movie.Type ?? "movie", movie.Id ?? string.Empty).ConfigureAwait(true);
-            var libraryEntries = await _libraryService.GetEntriesAsync().ConfigureAwait(true);
+            try
+            {
+                SelectedMovie = movie;
+                IsSeries = string.Equals(movie.Type, "series", StringComparison.OrdinalIgnoreCase);
+                IsSavedInLibrary = await _libraryService.IsSavedAsync(movie.Type ?? "movie", movie.Id ?? string.Empty).ConfigureAwait(true);
+                var libraryEntries = await _libraryService.GetEntriesAsync().ConfigureAwait(true);
+                token.ThrowIfCancellationRequested();
             _playbackEntry = libraryEntries.FirstOrDefault(entry =>
                 string.Equals(entry.Movie?.Id, movie.Id, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(entry.Movie?.Type ?? "movie", movie.Type ?? "movie", StringComparison.OrdinalIgnoreCase));
@@ -104,8 +120,6 @@ namespace StreamioX.App.ViewModels
             OnPropertyChanged(nameof(RuntimeText));
             OnPropertyChanged(nameof(ContentTypeText));
 
-            try
-            {
                 await _addonService.InitializeAsync(token).ConfigureAwait(true);
 
                 // Catalog results are previews. Resolve the full Stremio meta object
@@ -134,7 +148,12 @@ namespace StreamioX.App.ViewModels
                     // is reading the details page. Selecting it later is a cache hit.
                     var firstEpisodeId = Episodes.FirstOrDefault()?.Id;
                     if (!string.IsNullOrWhiteSpace(firstEpisodeId))
-                        _ = PrefetchEpisodeStreamsAsync(firstEpisodeId, token);
+                    {
+                        CancelIfActive(_prefetchCts);
+                        var prefetchCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        _prefetchCts = prefetchCts;
+                        _ = PrefetchEpisodeStreamsAsync(firstEpisodeId, prefetchCts);
+                    }
                     return;
                 }
 
@@ -146,8 +165,34 @@ namespace StreamioX.App.ViewModels
             catch (Exception ex) { ErrorMessage = $"Unable to load title details: {ex.Message}"; }
             finally
             {
-                IsLoadingMetadata = false;
+                // An older cancelled metadata request must not clear the loading
+                // state owned by a newer navigation to another title.
+                if (ReferenceEquals(_loadCts, loadCts))
+                {
+                    IsLoadingMetadata = false;
+                    _loadCts = null;
+                }
+                loadCts.Dispose();
             }
+        }
+
+        /// <summary>Cancels outstanding detail, metadata, prefetch, and provider requests when leaving the page.</summary>
+        public void CancelPendingRequests()
+        {
+            // Each asynchronous operation owns and disposes its CTS in its finally block.
+            // Detach here so a later navigation cannot mistake a cancelled request for the current one.
+            var loadCts = _loadCts;
+            var streamsCts = _streamsCts;
+            var prefetchCts = _prefetchCts;
+            _loadCts = null;
+            _streamsCts = null;
+            _prefetchCts = null;
+
+            CancelIfActive(loadCts);
+            CancelIfActive(streamsCts);
+            CancelIfActive(prefetchCts);
+            IsLoadingMetadata = false;
+            IsLoadingStreams = false;
         }
 
         [RelayCommand]
@@ -254,7 +299,7 @@ namespace StreamioX.App.ViewModels
         {
             if (SelectedMovie == null || string.IsNullOrWhiteSpace(contentId)) return;
 
-            _streamsCts?.Cancel();
+            CancelIfActive(_streamsCts);
             var requestCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _streamsCts = requestCts;
             var token = requestCts.Token;
@@ -289,17 +334,15 @@ namespace StreamioX.App.ViewModels
                                         return;
                                     foreach (var stream in ordered)
                                     {
-                                        var key = !string.IsNullOrWhiteSpace(stream.Url) ? stream.Url.Trim()
-                                            : !string.IsNullOrWhiteSpace(stream.InfoHash) ? stream.InfoHash.Trim()
-                                            : stream.Title?.Trim() ?? string.Empty;
-                                        if (key.Length > 0 && !Streams.Any(existing =>
+                                        var key = StreamSourceIdentity.GetKey(stream);
+                                        if (key == null || !Streams.Any(existing =>
                                             string.Equals(
-                                                !string.IsNullOrWhiteSpace(existing.Url) ? existing.Url.Trim()
-                                                    : !string.IsNullOrWhiteSpace(existing.InfoHash) ? existing.InfoHash.Trim()
-                                                    : existing.Title?.Trim() ?? string.Empty,
+                                                StreamSourceIdentity.GetKey(existing),
                                                 key,
                                                 StringComparison.OrdinalIgnoreCase)))
+                                        {
                                             Streams.Add(stream);
+                                        }
                                     }
                                 });
                         // Do not start torrent engines during discovery. Torrent setup is deferred until playback.
@@ -354,7 +397,7 @@ namespace StreamioX.App.ViewModels
              string.Equals(uri.Scheme, "magnet", StringComparison.OrdinalIgnoreCase));
 
         /// <summary>Preloads episode stream results so selecting the next episode feels more responsive.</summary>
-        private async Task PrefetchEpisodeStreamsAsync(string episodeId, CancellationToken cancellationToken)
+        private async Task PrefetchEpisodeStreamsAsync(string episodeId, CancellationTokenSource prefetchCts)
         {
             try
             {
@@ -362,7 +405,7 @@ namespace StreamioX.App.ViewModels
                 var streams = await _streamService.GetFromInstalledAddonsAsync(
                     type,
                     episodeId,
-                    cancellationToken)
+                    prefetchCts.Token)
                     .ConfigureAwait(false);
                 PlaybackDiagnostics.Write(
                     $"[Prefetch] Cached {streams.Count} stream result(s) for episode {episodeId}.");
@@ -371,6 +414,12 @@ namespace StreamioX.App.ViewModels
             catch (Exception ex)
             {
                 PlaybackDiagnostics.Write($"[Prefetch] Episode stream prefetch failed: {ex.Message}");
+            }
+            finally
+            {
+                if (ReferenceEquals(_prefetchCts, prefetchCts))
+                    _prefetchCts = null;
+                prefetchCts.Dispose();
             }
         }
 

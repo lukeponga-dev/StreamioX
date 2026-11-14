@@ -68,7 +68,7 @@ namespace StreamioX.App.Views
             }
         }
 
-        private async void SearchTimer_Tick(object sender, object e)
+        private async void SearchTimer_Tick(object? sender, object e)
         {
             _searchTimer.Stop();
             await RunSearchAsync();
