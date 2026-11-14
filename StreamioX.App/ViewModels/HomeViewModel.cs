@@ -64,14 +64,14 @@ namespace StreamioX.App.ViewModels
                     ContinueWatching.Add(entry);
 
                 PopularMovies.Clear();
-                foreach (var item in moviesTask.Result.Where(x => !string.IsNullOrWhiteSpace(x.Id)).Take(20))
+                foreach (var item in moviesTask.Result.Where(x => !string.IsNullOrWhiteSpace(x.Id)).Take(12))
                 {
                     item.Type ??= "movie";
                     PopularMovies.Add(item);
                 }
 
                 PopularSeries.Clear();
-                foreach (var item in seriesTask.Result.Where(x => !string.IsNullOrWhiteSpace(x.Id)).Take(20))
+                foreach (var item in seriesTask.Result.Where(x => !string.IsNullOrWhiteSpace(x.Id)).Take(12))
                 {
                     item.Type ??= "series";
                     PopularSeries.Add(item);
@@ -81,11 +81,18 @@ namespace StreamioX.App.ViewModels
                     !string.IsNullOrWhiteSpace(x.BackgroundUrl) || !string.IsNullOrWhiteSpace(x.PosterUrl))
                     ?? PopularMovies.FirstOrDefault();
 
+                // Keep the third row distinct: the previous implementation repeated
+                // the first five popular movies and then showed them again as recommendations.
                 Recommended.Clear();
-                foreach (var item in PopularMovies.Skip(5).Take(15)) Recommended.Add(item);
+                foreach (var item in moviesTask.Result
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+                    .Skip(12).Take(8))
+                {
+                    item.Type ??= "movie";
+                    Recommended.Add(item);
+                }
 
                 MoreMovies.Clear();
-                foreach (var item in PopularMovies.Skip(20).Take(15)) MoreMovies.Add(item);
 
                 HasCatalogContent = PopularMovies.Count > 0 || PopularSeries.Count > 0;
                 StatusMessage = $"{PopularMovies.Count} movies · {PopularSeries.Count} series · {ContinueWatching.Count} in progress";

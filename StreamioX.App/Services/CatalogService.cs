@@ -30,9 +30,17 @@ namespace StreamioX.App.Services
                 return Array.Empty<Movie>();
 
             var url = $"{addonBaseUrl.TrimEnd('/')}/catalog/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(catalogId)}.json";
-            var response = await _stremioClient.GetFromJsonAsync<CatalogResponse>(url, cancellationToken)
-                .ConfigureAwait(false);
-            return response?.Metas ?? Array.Empty<Movie>();
+            // Catalog responses are stable enough for a short in-memory cache. This
+            // avoids repeating the same network transfer whenever users switch pages.
+            return await MemoryTtlCache.GetOrCreateAsync(
+                "catalog:" + url,
+                TimeSpan.FromMinutes(3),
+                async () =>
+                {
+                    var response = await _stremioClient.GetFromJsonAsync<CatalogResponse>(
+                        url, cancellationToken).ConfigureAwait(false);
+                    return (IReadOnlyList<Movie>)(response?.Metas ?? Array.Empty<Movie>());
+                }).ConfigureAwait(false);
         }
 
         /// <summary>Queries compatible catalog resources across installed add-ons and merges their results.</summary>

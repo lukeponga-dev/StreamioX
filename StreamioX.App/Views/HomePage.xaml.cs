@@ -21,14 +21,22 @@ namespace StreamioX.App.Views
             InitializeComponent();
             ViewModel = AppServices.GetRequiredService<HomeViewModel>();
             DataContext = ViewModel;
+            // Keep lightweight status changes separate from the expensive card tree.
+            // Rebuilding every poster row for each PropertyChanged event repeatedly
+            // recreates dozens of remote BitmapImages and causes visible stutter.
             ViewModel.PropertyChanged += (_, args) =>
             {
-                if (args.PropertyName == nameof(HomeViewModel.StatusMessage) ||
-                    args.PropertyName == nameof(HomeViewModel.ErrorMessage) ||
-                    args.PropertyName == nameof(HomeViewModel.IsLoading) ||
-                    args.PropertyName == nameof(HomeViewModel.FeaturedMovie) ||
-                    args.PropertyName == nameof(HomeViewModel.HasCatalogContent))
-                    RenderHome();
+                if (args.PropertyName == nameof(HomeViewModel.StatusMessage))
+                    StatusText.Text = ViewModel.StatusMessage;
+                else if (args.PropertyName == nameof(HomeViewModel.ErrorMessage))
+                    ErrorText.Text = ViewModel.ErrorMessage ?? string.Empty;
+                else if (args.PropertyName == nameof(HomeViewModel.IsLoading))
+                {
+                    LoadingRing.IsActive = ViewModel.IsLoading;
+                    LoadingRing.Visibility = ViewModel.IsLoading ? Visibility.Visible : Visibility.Collapsed;
+                    if (ViewModel.IsLoading)
+                        HeroTitle.Text = "Finding your next favourite…";
+                }
             };
             Loaded += HomePage_Loaded;
         }
@@ -84,7 +92,7 @@ namespace StreamioX.App.Views
             HeroBackdrop.Source = null;
             var artwork = movie?.BackgroundUrl;
             if (string.IsNullOrWhiteSpace(artwork)) artwork = movie?.PosterUrl;
-            if (TryCreateBitmap(artwork, out var bitmap))
+            if (TryCreateBitmap(artwork, 1280, out var bitmap))
                 HeroBackdrop.Source = bitmap;
         }
 
@@ -202,28 +210,45 @@ namespace StreamioX.App.Views
                 Height = height,
                 Stretch = Stretch.UniformToFill
             };
-            if (TryCreateBitmap(url, out var bitmap))
+            if (TryCreateBitmap(url, (int)width, out var bitmap))
                 image.Source = bitmap;
             else
                 image.Source = null;
             return image;
         }
 
-        /// <summary>Creates an image source from a remote artwork URL without letting decode errors break the page.</summary>
-        private static bool TryCreateBitmap(string? url, out BitmapImage bitmap)
+        // Reuse decoded artwork across page visits and keep poster decoding close to
+        // its on-screen dimensions instead of decoding full-resolution source images.
+        private static readonly Dictionary<string, BitmapImage> ArtworkCache =
+            new Dictionary<string, BitmapImage>(StringComparer.Ordinal);
+
+        /// <summary>Creates or reuses a size-limited remote artwork image source.</summary>
+        private static bool TryCreateBitmap(string? url, int decodePixelWidth, out BitmapImage bitmap)
         {
             bitmap = null!;
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
                 (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
                 return false;
 
+            var cacheKey = uri.AbsoluteUri + "|" + decodePixelWidth;
+            if (ArtworkCache.TryGetValue(cacheKey, out var cachedBitmap))
+            {
+                bitmap = cachedBitmap;
+                return true;
+            }
+
             try
             {
-                bitmap = new BitmapImage(uri);
+                bitmap = new BitmapImage { DecodePixelWidth = Math.Max(1, decodePixelWidth) };
+                bitmap.UriSource = uri;
+                if (ArtworkCache.Count >= 160)
+                    ArtworkCache.Clear();
+                ArtworkCache[cacheKey] = bitmap;
                 return true;
             }
             catch
             {
+                bitmap = null!;
                 return false;
             }
         }

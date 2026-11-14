@@ -3,7 +3,6 @@
 using StreamioX.App.Services;
 using StreamioX.App.Views;
 using System;
-using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.UI.Xaml;
@@ -27,14 +26,8 @@ namespace StreamioX.App
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
-            // Create and touch the shared MediaPlayer before navigating to content.
-            // MediaPlayer/XAML setup stays on the UI thread; network startup remains asynchronous.
-            AppServices.GetRequiredService<PlaybackSessionService>().WarmUp();
-
-            // Warm up Stremio addon registry (installs Cinemeta on first run)
-            _ = AppServices.GetRequiredService<IAuthService>().InitializeAsync();
-            _ = AppServices.GetRequiredService<IAddonService>().InitializeAsync();
-
+            // Defer media-pipeline and add-on initialization until those features are
+            // actually opened. Starting them here competes with first-page rendering.
             Frame rootFrame = Window.Current.Content as Frame;
 
             if (rootFrame == null)
@@ -57,33 +50,12 @@ namespace StreamioX.App
 
             Window.Current.Activate();
 
-            // Start the embedded torrent HTTP server in the background so it is
-            // ready before the user selects a torrent stream.
-            _ = StartTorrentServerAsync("app launch");
-        }
-
-        /// <summary>Starts the local torrent HTTP bridge and records startup failures for diagnostics.</summary>
-        private async Task StartTorrentServerAsync(string reason)
-        {
-            try
-            {
-                var address = await AppServices.GetRequiredService<ITorrentBridgeService>()
-                    .StartServerAsync();
-                PlaybackDiagnostics.Write($"[Startup] Torrent HTTP server ready at {address} ({reason}).");
-            }
-            catch (Exception ex)
-            {
-                // Keep the app usable if the native bridge is unavailable. A later
-                // playback request can retry startup and Settings can show diagnostics.
-                PlaybackDiagnostics.Write(
-                    $"[Startup] Torrent HTTP server failed to start ({reason}): {ex.GetType().Name}, HRESULT 0x{ex.HResult:X8}: {ex.Message}");
-            }
+            // TorrentBridgeService starts on demand when a torrent stream is selected.
         }
 
         private void OnResuming(object sender, object e)
         {
-            // The server is stopped during suspension, so bring it back on resume.
-            _ = StartTorrentServerAsync("app resume");
+            // Playback starts the torrent bridge on demand; resume needs no background work.
         }
 
         private void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
