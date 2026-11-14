@@ -24,6 +24,7 @@ namespace StreamioX.App.ViewModels
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _telemetryTimer;
         private CancellationTokenSource? _pollCts;
+        private bool _isInitialized;
 
         // Partial properties allow CsWinRT to generate the required WinRT marshalling
         // metadata for XAML-bound properties in NativeAOT builds.
@@ -56,10 +57,18 @@ namespace StreamioX.App.ViewModels
             _torrentBridge = torrentBridge;
             _navigation = navigation;
             _httpClient = httpClient;
+        }
+
+        /// <summary>Initializes platform-backed settings and telemetry after the page enters the app lifecycle.</summary>
+        public async Task InitializeAsync()
+        {
+            if (_isInitialized) return;
+            _isInitialized = true;
+
             PlaybackServerAddress = ApplicationData.Current.LocalSettings.Values["PlaybackServerAddress"] as string ?? string.Empty;
             RefreshTorrentServerState();
             StartTelemetry();
-            _ = InitAuthAsync();
+            await InitAuthAsync();
         }
 
         private async Task InitAuthAsync()

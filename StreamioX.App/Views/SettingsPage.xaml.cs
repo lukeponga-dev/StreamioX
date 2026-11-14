@@ -15,6 +15,7 @@ namespace StreamioX.App.Views
             InitializeComponent();
             ViewModel = AppServices.GetRequiredService<SettingsViewModel>();
             DataContext = ViewModel;
+            _ = ViewModel.InitializeAsync();
         }
 
         private async void StartQr_Click(object sender, RoutedEventArgs e)

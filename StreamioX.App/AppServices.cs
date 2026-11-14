@@ -59,44 +59,12 @@ namespace StreamioX.App
             if (_provider != null) return;
 
             var services = new ServiceCollection();
-
-            services.AddHttpClient<StremioClient>(client =>
+            services.AddStreamioXServices();
+            _provider = services.BuildServiceProvider(new ServiceProviderOptions
             {
-                client.Timeout = TimeSpan.FromSeconds(30);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("StreamioX/1.0 (Xbox; UWP)");
+                ValidateScopes = true,
+                ValidateOnBuild = true
             });
-
-            // Shared HttpClient for auth / link API
-            services.AddSingleton<HttpClient>(_ =>
-            {
-                var c = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                c.DefaultRequestHeaders.UserAgent.ParseAdd("StreamioX/1.0 (Xbox; UWP)");
-                return c;
-            });
-
-            services.AddSingleton<INavigationService, NavigationService>();
-            services.AddSingleton<IAuthService, AuthService>();
-            services.AddSingleton<IAddonService, AddonService>();
-            services.AddSingleton<ILibraryService, LibraryService>();
-            services.AddSingleton<ICatalogService, CatalogService>();
-            services.AddSingleton<IMetadataService, MetadataService>();
-            services.AddSingleton<IStreamService, StreamService>();
-            services.AddSingleton<ITorrentBridgeService, TorrentBridgeService>();
-            services.AddSingleton<FFmpegPlaybackService>();
-            services.AddSingleton<PlaybackSessionService>();
-
-            services.AddTransient<MainViewModel>();
-            services.AddTransient<DiscoverViewModel>();
-            services.AddTransient<DetailsViewModel>();
-            services.AddTransient<HomeViewModel>();
-            services.AddTransient<PlayerViewModel>();
-            services.AddTransient<SettingsViewModel>();
-            services.AddTransient<LibraryViewModel>();
-            services.AddTransient<AddonsViewModel>();
-            services.AddTransient<SearchViewModel>();
-            services.AddTransient<DiagnosticsViewModel>();
-
-            _provider = services.BuildServiceProvider();
         }
 
         /// <summary>
