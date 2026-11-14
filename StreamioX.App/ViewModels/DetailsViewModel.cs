@@ -103,22 +103,22 @@ namespace StreamioX.App.ViewModels
                 IsSavedInLibrary = await _libraryService.IsSavedAsync(movie.Type ?? "movie", movie.Id ?? string.Empty).ConfigureAwait(true);
                 var libraryEntries = await _libraryService.GetEntriesAsync().ConfigureAwait(true);
                 token.ThrowIfCancellationRequested();
-            _playbackEntry = libraryEntries.FirstOrDefault(entry =>
-                string.Equals(entry.Movie?.Id, movie.Id, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(entry.Movie?.Type ?? "movie", movie.Type ?? "movie", StringComparison.OrdinalIgnoreCase));
-            IsResumeRequested = false;
-            LibraryButtonText = IsSavedInLibrary ? "✓  Remove from Library" : "＋  Add to Library";
-            NotifyDetailsProperties();
-            Episodes.Clear();
-            Streams.Clear();
-            ProviderStatusLines.Clear();
-            SelectedEpisode = null;
-            ErrorMessage = null;
-            UpdateResumeAvailability();
-            OnPropertyChanged(nameof(GenreText));
-            OnPropertyChanged(nameof(RatingText));
-            OnPropertyChanged(nameof(RuntimeText));
-            OnPropertyChanged(nameof(ContentTypeText));
+                _playbackEntry = libraryEntries.FirstOrDefault(entry =>
+                    string.Equals(entry.Movie?.Id, movie.Id, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(entry.Movie?.Type ?? "movie", movie.Type ?? "movie", StringComparison.OrdinalIgnoreCase));
+                IsResumeRequested = false;
+                LibraryButtonText = IsSavedInLibrary ? "✓  Remove from Library" : "＋  Add to Library";
+                NotifyDetailsProperties();
+                Episodes.Clear();
+                Streams.Clear();
+                ProviderStatusLines.Clear();
+                SelectedEpisode = null;
+                ErrorMessage = null;
+                UpdateResumeAvailability();
+                OnPropertyChanged(nameof(GenreText));
+                OnPropertyChanged(nameof(RatingText));
+                OnPropertyChanged(nameof(RuntimeText));
+                OnPropertyChanged(nameof(ContentTypeText));
 
                 await _addonService.InitializeAsync(token).ConfigureAwait(true);
 
@@ -246,6 +246,8 @@ namespace StreamioX.App.ViewModels
             IsResumeRequested = false;
             SelectedEpisode = episode;
             await LoadStreamsAsync(episode.Id, CancellationToken.None).ConfigureAwait(true);
+            if (Streams.Count > 0)
+                await PlayStreamAsync(Streams[0]).ConfigureAwait(true);
         }
 
         [RelayCommand]
@@ -255,6 +257,7 @@ namespace StreamioX.App.ViewModels
                 return;
 
             IsResumeRequested = true;
+
             if (IsSeries)
             {
                 var episodeId = _playbackEntry.LastEpisodeId;
@@ -269,6 +272,17 @@ namespace StreamioX.App.ViewModels
 
                 SelectedEpisode = episode;
                 await LoadStreamsAsync(episode.Id!, CancellationToken.None).ConfigureAwait(true);
+                if (Streams.Count > 0)
+                    await PlayStreamAsync(Streams[0]).ConfigureAwait(true);
+                return;
+            }
+
+            // Movie resume: load streams for the movie and play the first one.
+            if (SelectedMovie != null && !string.IsNullOrWhiteSpace(SelectedMovie.Id))
+            {
+                await LoadStreamsAsync(SelectedMovie.Id, CancellationToken.None).ConfigureAwait(true);
+                if (Streams.Count > 0)
+                    await PlayStreamAsync(Streams[0]).ConfigureAwait(true);
             }
         }
 
