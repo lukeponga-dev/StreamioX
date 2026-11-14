@@ -22,6 +22,7 @@ namespace StreamioX.App.Services
             string type,
             string id,
             CancellationToken cancellationToken = default,
-            System.Func<IReadOnlyList<StreamSource>, Task>? onProviderResult = null);
+            System.Func<IReadOnlyList<StreamSource>, Task>? onProviderResult = null,
+            System.Func<string, string, Task>? onProviderStatus = null);
     }
 }

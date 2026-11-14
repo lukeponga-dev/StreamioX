@@ -22,13 +22,15 @@ namespace StreamioX.App.Services
         public static async Task<T> GetOrCreateAsync<T>(
             string key,
             TimeSpan ttl,
-            Func<Task<T>> factory)
+            Func<Task<T>> factory,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Entries.TryGetValue(key, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
                 return (T)cached.Value;
 
             var gate = Gates.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-            await gate.WaitAsync().ConfigureAwait(false);
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 if (Entries.TryGetValue(key, out cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)

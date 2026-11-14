@@ -22,6 +22,7 @@ namespace StreamioX.App.Views
         public DetailsPage()
         {
             InitializeComponent();
+            FocusHelper.AttachXboxFocus(WatchNowButton);
             FocusHelper.AttachXboxFocus(LibraryButton);
             FocusHelper.AttachXboxFocus(ResumeButton);
             ViewModel = AppServices.GetRequiredService<DetailsViewModel>();
@@ -32,52 +33,73 @@ namespace StreamioX.App.Views
 
         private void ContentRows_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            RenderContentRows();
+            // Episode cards are data-bound. Append stream cards as each provider
+            // responds instead of rebuilding every existing button on every Add.
+            if (ReferenceEquals(sender, ViewModel.Streams) &&
+                e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
+            {
+                foreach (StreamSource stream in e.NewItems)
+                    AddStreamButton(stream);
+                FocusFirstMovieStreamIfNeeded();
+                return;
+            }
+
+            if (ReferenceEquals(sender, ViewModel.Streams))
+                RenderContentRows();
         }
 
         private void RenderContentRows()
         {
-            // Episodes are rendered by the horizontal ItemsRepeater bound to
-            // ViewModel.Episodes; only stream options need imperative construction.
             StreamsRow.Children.Clear();
             foreach (var stream in ViewModel.Streams)
-            {
-                var name = string.IsNullOrWhiteSpace(stream.Name) ? "Stream source" : stream.Name;
-                var details = new StackPanel { Spacing = 4 };
-                details.Children.Add(new TextBlock
-                {
-                    Text = name, Foreground = new SolidColorBrush(Colors.White),
-                    FontSize = 16, FontWeight = Windows.UI.Text.FontWeights.Bold
-                });
-                if (!string.IsNullOrWhiteSpace(stream.Title))
-                    details.Children.Add(new TextBlock
-                    {
-                        Text = stream.Title, Foreground = new SolidColorBrush(Color.FromArgb(255, 185, 194, 201)),
-                        FontSize = 14, TextWrapping = TextWrapping.Wrap
-                    });
-                details.Children.Add(new TextBlock
-                {
-                    Text = stream.SourceKind, Foreground = new SolidColorBrush(Color.FromArgb(255, 47, 220, 128)),
-                    FontSize = 12, FontWeight = Windows.UI.Text.FontWeights.SemiBold
-                });
-                var button = new Button
-                {
-                    Content = details, Tag = stream, HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(16, 12, 16, 12),
-                    Background = new SolidColorBrush(Color.FromArgb(255, 22, 27, 37)),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(255, 57, 69, 83)),
-                    BorderThickness = new Thickness(1), Margin = new Thickness(0, 2, 0, 2),
-                    UseSystemFocusVisuals = true,
-                    Style = Application.Current.Resources["XboxFocusCardStyle"] as Style
-                };
-                FocusHelper.AttachXboxFocus(button);
-                button.GotFocus += StreamButton_GotFocus;
-                button.Click += StreamButton_Click;
-                StreamsRow.Children.Add(button);
-            }
+                AddStreamButton(stream);
+            FocusFirstMovieStreamIfNeeded();
+        }
 
-            // Movie pages have no episode rail, so move controller focus directly
-            // to the first playable source as soon as stream results arrive.
+        private void AddStreamButton(StreamSource stream)
+        {
+            var name = string.IsNullOrWhiteSpace(stream.Name) ? "Stream source" : stream.Name;
+            var details = new StackPanel { Spacing = 4 };
+            details.Children.Add(new TextBlock
+            {
+                Text = name, Foreground = new SolidColorBrush(Colors.White),
+                FontSize = 16, FontWeight = Windows.UI.Text.FontWeights.Bold
+            });
+            if (!string.IsNullOrWhiteSpace(stream.Title))
+                details.Children.Add(new TextBlock
+                {
+                    Text = stream.Title, Foreground = new SolidColorBrush(Color.FromArgb(255, 185, 194, 201)),
+                    FontSize = 14, TextWrapping = TextWrapping.Wrap
+                });
+            details.Children.Add(new TextBlock
+            {
+                Text = stream.SourceKind, Foreground = new SolidColorBrush(Color.FromArgb(255, 47, 220, 128)),
+                FontSize = 12, FontWeight = Windows.UI.Text.FontWeights.SemiBold
+            });
+
+            var button = new Button
+            {
+                Content = details,
+                Tag = stream,
+                MinHeight = 76,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(16, 12, 16, 12),
+                Background = new SolidColorBrush(Color.FromArgb(255, 22, 27, 37)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(255, 57, 69, 83)),
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(0, 2, 0, 2),
+                UseSystemFocusVisuals = true,
+                Style = Application.Current.Resources["SecondaryButtonStyle"] as Style
+            };
+            FocusHelper.AttachXboxFocus(button);
+            button.GotFocus += StreamButton_GotFocus;
+            button.Click += StreamButton_Click;
+            StreamsRow.Children.Add(button);
+        }
+
+        private void FocusFirstMovieStreamIfNeeded()
+        {
             if (!ViewModel.IsSeries && !_movieStreamFocusApplied && StreamsRow.Children.Count > 0)
             {
                 _movieStreamFocusApplied = true;

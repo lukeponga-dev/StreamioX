@@ -1,4 +1,4 @@
-<!-- Purpose: Defines the DetailsPage page layout and controller-focused visual structure. -->
+<!-- Purpose: Responsive media details layout with accessible actions and progressive stream discovery feedback. -->
 <Page
     x:Class="StreamioX.App.Views.DetailsPage"
     x:Name="PageRoot"
@@ -13,7 +13,6 @@
     </Page.Resources>
 
     <Grid>
-        <!-- Artwork is decorative only; the gradient remains as a reliable fallback. -->
         <Grid Height="390" VerticalAlignment="Top" IsHitTestVisible="False">
             <Image x:Name="BackdropImage" Stretch="UniformToFill" Opacity="0.34"
                    ImageFailed="Artwork_ImageFailed"/>
@@ -29,105 +28,135 @@
         </Grid>
 
         <Grid Padding="32,18,32,24">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Column="0" Spacing="12" VerticalAlignment="Top">
-            <Border Width="220" Height="330" CornerRadius="12" Background="#171923"
-                    BorderBrush="#303448" BorderThickness="1">
-                <Grid>
-                    <TextBlock x:Name="PosterFallback" Text="ARTWORK UNAVAILABLE"
-                               Foreground="#FFB9B2D0" FontSize="13"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextAlignment="Center" TextWrapping="Wrap"/>
-                    <Image x:Name="PosterImage" Stretch="UniformToFill"
-                           ImageOpened="PosterImage_ImageOpened"
-                           ImageFailed="Artwork_ImageFailed"/>
-                </Grid>
-            </Border>
-            <TextBlock Text="{Binding ContentTypeText}" Foreground="{StaticResource FocusAccentBrush}" FontSize="13" FontWeight="Bold"/>
-            <TextBlock Text="{Binding RatingText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="15"/>
-            <TextBlock Text="{Binding RuntimeText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="14"/>
-        </StackPanel>
-
-        <ScrollViewer Grid.Column="1" Margin="28,0,0,0" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="16">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="{Binding TitleText}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="34" FontWeight="Bold" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding ReleaseText}" Foreground="{StaticResource FocusAccentBrush}" FontSize="17" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding GenreText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <Button x:Name="LibraryButton" Content="{Binding LibraryButtonText}" Command="{Binding ToggleLibraryCommand}" HorizontalAlignment="Left" Padding="18,9" MinWidth="150" Background="{StaticResource SurfaceBrush}" Foreground="{StaticResource TextPrimaryBrush}" Style="{StaticResource XboxFocusCardStyle}"/>
-                <Button x:Name="ResumeButton" Content="{Binding ResumeButtonText}" Click="ResumeButton_Click"
-                        Visibility="{Binding HasResumeProgress, Converter={StaticResource BoolToVisibilityConverter}}"
-                        HorizontalAlignment="Left" Padding="18,9" MinWidth="150"
-                        Background="{StaticResource FocusAccentBrush}" Foreground="White"
-                        Style="{StaticResource XboxFocusCardStyle}"/>
-
-                <StackPanel Spacing="8" MaxWidth="1000">
-                    <TextBlock Text="Synopsis" Foreground="{StaticResource TextPrimaryBrush}" FontSize="21" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding DescriptionText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16" TextWrapping="Wrap" LineHeight="24" MaxWidth="1000"/>
-                </StackPanel>
-                
-                <StackPanel x:Name="EpisodesSection" Spacing="12"
-                            Visibility="{Binding IsSeries, Converter={StaticResource BoolToVisibilityConverter}}">
-                    <TextBlock Text="Episodes" Foreground="{StaticResource TextPrimaryBrush}" FontSize="21" FontWeight="SemiBold"/>
-                    <ScrollViewer HorizontalScrollMode="Enabled"
-                                  HorizontalScrollBarVisibility="Auto"
-                                  VerticalScrollMode="Disabled"
-                                  VerticalScrollBarVisibility="Disabled">
-                        <controls:ItemsRepeater x:Name="EpisodesRepeater"
-                                                ItemsSource="{Binding Episodes}">
-                            <controls:ItemsRepeater.Layout>
-                                <controls:StackLayout Orientation="Horizontal" Spacing="8"/>
-                            </controls:ItemsRepeater.Layout>
-                            <controls:ItemsRepeater.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Tag="{Binding}"
-                                            Click="EpisodeButton_Click"
-                                            Width="300" Height="88"
-                                            HorizontalContentAlignment="Left"
-                                            Padding="12,8"
-                                            Background="#161B25"
-                                            BorderBrush="#394553"
-                                            BorderThickness="1"
-                                            Style="{StaticResource XboxFocusCardStyle}">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="{Binding Title, FallbackValue='Episode'}"
-                                                       Foreground="White"
-                                                       FontSize="16"
-                                                       FontWeight="SemiBold"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding Overview}"
-                                                       Foreground="#FFB9C2C9"
-                                                       FontSize="13"
-                                                       TextWrapping="Wrap"
-                                                       MaxHeight="48"/>
-                                        </StackPanel>
-                                    </Button>
-                                </DataTemplate>
-                            </controls:ItemsRepeater.ItemTemplate>
-                        </controls:ItemsRepeater>
-                    </ScrollViewer>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="Available Streams" Foreground="{StaticResource TextPrimaryBrush}" FontSize="21" FontWeight="SemiBold"/>
-                    <ProgressRing IsActive="{Binding IsLoadingStreams}" Width="16" Height="16" Foreground="{StaticResource FocusAccentBrush}"/>
-                </StackPanel>
-                <TextBlock Text="{Binding ErrorMessage}" Foreground="#FFFF9B8F" TextWrapping="Wrap"/>
-                <Border x:Name="StreamDetailsPanel" Background="#151725" BorderBrush="#4B4568" BorderThickness="1" CornerRadius="8" Padding="10" Visibility="Collapsed">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Selected source" Foreground="{StaticResource FocusAccentBrush}" FontSize="13" FontWeight="Bold"/>
-                        <TextBlock x:Name="StreamDetailsText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="15" TextWrapping="Wrap"/>
-                    </StackPanel>
+            <StackPanel Grid.Column="0" Spacing="12" VerticalAlignment="Top">
+                <Border Width="220" Height="330" CornerRadius="12" Background="#171923"
+                        BorderBrush="#303448" BorderThickness="1">
+                    <Grid>
+                        <TextBlock x:Name="PosterFallback" Text="ARTWORK UNAVAILABLE"
+                                   Foreground="#FFB9B2D0" FontSize="13"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextAlignment="Center" TextWrapping="Wrap"/>
+                        <Image x:Name="PosterImage" Stretch="UniformToFill"
+                               ImageOpened="PosterImage_ImageOpened"
+                               ImageFailed="Artwork_ImageFailed"/>
+                    </Grid>
                 </Border>
-                <StackPanel x:Name="StreamsRow" Spacing="8"/>
+                <TextBlock Text="{Binding ContentTypeText}" Foreground="{StaticResource FocusAccentBrush}" FontSize="13" FontWeight="Bold"/>
+                <TextBlock Text="{Binding RatingText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="15"/>
+                <TextBlock Text="{Binding RuntimeText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="14"/>
             </StackPanel>
-        </ScrollViewer>
+
+            <ScrollViewer Grid.Column="1" Margin="28,0,0,0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="18">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="{Binding TitleText}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="34" FontWeight="Bold" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding ReleaseText}" Foreground="{StaticResource FocusAccentBrush}" FontSize="17" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding GenreText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                    Visibility="{Binding IsLoadingMetadata, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ProgressRing IsActive="True" Width="18" Height="18"/>
+                            <TextBlock Text="Loading title details..." Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
+                        <Button x:Name="WatchNowButton" Content="▶  Watch Now"
+                                Command="{Binding WatchNowCommand}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                HorizontalAlignment="Left" MinWidth="176"/>
+                        <Button x:Name="LibraryButton" Content="{Binding LibraryButtonText}"
+                                Command="{Binding ToggleLibraryCommand}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                HorizontalAlignment="Left"/>
+                        <Button x:Name="ResumeButton" Content="{Binding ResumeButtonText}"
+                                Click="ResumeButton_Click"
+                                Visibility="{Binding HasResumeProgress, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                HorizontalAlignment="Left"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8" MaxWidth="1000">
+                        <TextBlock Text="Synopsis" Foreground="{StaticResource TextPrimaryBrush}" FontSize="21" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding DescriptionText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16" TextWrapping="Wrap" LineHeight="24" MaxWidth="1000"/>
+                    </StackPanel>
+
+                    <StackPanel x:Name="EpisodesSection" Spacing="12"
+                                Visibility="{Binding IsSeries, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="Episodes" Foreground="{StaticResource TextPrimaryBrush}" FontSize="21" FontWeight="SemiBold"/>
+                        <ScrollViewer HorizontalScrollMode="Enabled"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollMode="Disabled"
+                                      VerticalScrollBarVisibility="Disabled">
+                            <controls:ItemsRepeater x:Name="EpisodesRepeater" ItemsSource="{Binding Episodes}">
+                                <controls:ItemsRepeater.Layout>
+                                    <controls:StackLayout Orientation="Horizontal" Spacing="8"/>
+                                </controls:ItemsRepeater.Layout>
+                                <controls:ItemsRepeater.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Tag="{Binding}" Click="EpisodeButton_Click"
+                                                Width="300" Height="88"
+                                                HorizontalContentAlignment="Left" Padding="12,8"
+                                                Background="#161B25" BorderBrush="#394553"
+                                                BorderThickness="1"
+                                                Style="{StaticResource SecondaryButtonStyle}">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="{Binding Title, FallbackValue='Episode'}"
+                                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                                           FontSize="16" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Overview}"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           FontSize="13" TextWrapping="Wrap" MaxHeight="48"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </controls:ItemsRepeater.ItemTemplate>
+                            </controls:ItemsRepeater>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <StackPanel Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Available Streams" Foreground="{StaticResource TextPrimaryBrush}" FontSize="21" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Streams.Count}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <Border Background="#171923" BorderBrush="#39334F" BorderThickness="1"
+                                CornerRadius="10" Padding="18"
+                                Visibility="{Binding IsLoadingStreams, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel HorizontalAlignment="Center" Spacing="10">
+                                <ProgressRing IsActive="{Binding IsLoadingStreams}" Width="34" Height="34"
+                                              Foreground="{StaticResource FocusAccentBrush}"/>
+                                <TextBlock Text="Finding available streams..."
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           FontSize="17" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding ProviderStatusLines}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Foreground="{StaticResource TextSecondaryBrush}"
+                                               FontSize="13" Margin="4,1"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding ErrorMessage}" Foreground="#FFFF9B8F" TextWrapping="Wrap"/>
+                        <Border x:Name="StreamDetailsPanel" Background="#151725" BorderBrush="#4B4568"
+                                BorderThickness="1" CornerRadius="8" Padding="10" Visibility="Collapsed">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Selected source" Foreground="{StaticResource FocusAccentBrush}" FontSize="13" FontWeight="Bold"/>
+                                <TextBlock x:Name="StreamDetailsText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="15" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <StackPanel x:Name="StreamsRow" Spacing="8"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
     </Grid>
 </Page>

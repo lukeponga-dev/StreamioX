@@ -1,6 +1,7 @@
-// Purpose: Implements StreamService application behavior and coordinates the related Stremio, playback, or platform APIs.
+// Purpose: Queries installed Stremio stream add-ons concurrently and publishes provider results as they arrive.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -12,6 +13,8 @@ namespace StreamioX.App.Services
     public sealed class StreamService : IStreamService
     {
         private static readonly TimeSpan StreamResponseTtl = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(12);
+        private static readonly ConcurrentDictionary<string, long> ProviderLatencyMs = new(StringComparer.OrdinalIgnoreCase);
         private readonly StremioClient _stremioClient;
         private readonly IAddonService _addonService;
 
@@ -38,50 +41,87 @@ namespace StreamioX.App.Services
                 StreamResponseTtl,
                 async () =>
                 {
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeout.CancelAfter(ProviderTimeout);
                     var response = await _stremioClient
-                        .GetFromJsonAsync<StreamResponse>(url, cancellationToken)
+                        .GetFromJsonAsync<StreamResponse>(url, timeout.Token)
                         .ConfigureAwait(false);
                     return (IReadOnlyList<StreamSource>)(response?.Streams ?? Array.Empty<StreamSource>());
-                }).ConfigureAwait(false);
+                },
+                cancellationToken).ConfigureAwait(false);
         }
 
-        /// <summary>Queries each eligible stream provider and normalizes its returned sources.</summary>
+        /// <summary>Starts independent add-on requests together and publishes each provider outcome immediately.</summary>
         public async Task<IReadOnlyList<StreamSource>> GetFromInstalledAddonsAsync(
             string type,
             string id,
             CancellationToken cancellationToken = default,
-            Func<IReadOnlyList<StreamSource>, Task>? onProviderResult = null)
+            Func<IReadOnlyList<StreamSource>, Task>? onProviderResult = null,
+            Func<string, string, Task>? onProviderStatus = null)
         {
             await _addonService.InitializeAsync(cancellationToken).ConfigureAwait(false);
-            var providers = _addonService.GetStreamProviders(type, id);
-            if (providers.Count == 0)
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var providers = _addonService.GetStreamProviders(type, id)
+                .OrderBy(provider => ProviderLatencyMs.TryGetValue(provider.Id, out var latency) ? latency : 5000)
+                .ToArray();
+            if (providers.Length == 0)
                 return Array.Empty<StreamSource>();
 
-            // Start every provider before awaiting any of them. Each successful
-            // provider publishes its results immediately, enabling the details
-            // page to expose a playable source while slower add-ons continue.
             var tasks = providers.Select(async addon =>
             {
+                var providerName = string.IsNullOrWhiteSpace(addon.Name) ? addon.Id : addon.Name;
+                var started = DateTimeOffset.UtcNow;
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(ProviderTimeout);
+
                 try
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var streams = await GetStreamsAsync(addon.BaseUrl, type, id, cancellationToken)
+                    if (onProviderStatus != null)
+                        await onProviderStatus(providerName, "Searching").ConfigureAwait(false);
+
+                    var streams = await GetStreamsAsync(addon.BaseUrl, type, id, timeout.Token)
                         .ConfigureAwait(false);
-                    if (streams.Count > 0 && onProviderResult != null)
+                    ProviderLatencyMs[addon.Id] = Math.Max(1, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
+
+                    if (onProviderResult != null)
                         await onProviderResult(streams).ConfigureAwait(false);
+                    if (onProviderStatus != null)
+                        await onProviderStatus(providerName, "Complete").ConfigureAwait(false);
+
                     return streams;
                 }
-                catch (OperationCanceledException) { throw; }
-                catch
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    // Isolate provider failures so one unavailable add-on doesn't
-                    // prevent other providers from returning playable streams.
+                    if (onProviderStatus != null)
+                        await onProviderStatus(providerName, "Cancelled").ConfigureAwait(false);
+                    throw;
+                }
+                catch (OperationCanceledException)
+                {
+                    if (onProviderStatus != null)
+                        await onProviderStatus(providerName, "Timed out").ConfigureAwait(false);
+                    return (IReadOnlyList<StreamSource>)Array.Empty<StreamSource>();
+                }
+                catch (Exception)
+                {
+                    if (onProviderStatus != null)
+                        await onProviderStatus(providerName, "Failed").ConfigureAwait(false);
                     return (IReadOnlyList<StreamSource>)Array.Empty<StreamSource>();
                 }
             }).ToArray();
 
             var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-            return results.SelectMany(streams => streams).ToArray();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return results.SelectMany(result => result)
+                .Where(stream =>
+                {
+                    var key = !string.IsNullOrWhiteSpace(stream.Url) ? stream.Url.Trim()
+                        : !string.IsNullOrWhiteSpace(stream.InfoHash) ? stream.InfoHash.Trim()
+                        : stream.Title?.Trim() ?? string.Empty;
+                    return key.Length > 0 && seen.Add(key);
+                })
+                .ToArray();
         }
     }
 }

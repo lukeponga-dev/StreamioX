@@ -8,7 +8,14 @@
         <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="Padding" Value="24,12"/>
-        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="MinHeight" Value="52"/>
+        <Setter Property="MinWidth" Value="160"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="UseSystemFocusVisuals" Value="True"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="FontSize" Value="16"/>
     </Style>
@@ -20,7 +27,12 @@
         <Setter Property="BorderBrush" Value="{StaticResource BorderDefaultBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="20,10"/>
-        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="MinHeight" Value="48"/>
+        <Setter Property="MinWidth" Value="132"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="UseSystemFocusVisuals" Value="True"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="FontSize" Value="14"/>
     </Style>

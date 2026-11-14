@@ -58,9 +58,9 @@ namespace StreamioX.App.Services
             }
             finally { _initializeLock.Release(); }
 
-            // Refresh every installed manifest at startup. Each failure is isolated and
-            // the last-known-good manifest remains usable offline.
-            await SyncAllAsync(cancellationToken).ConfigureAwait(false);
+            // Keep startup and first stream discovery network-light. Manifest refresh is
+            // an explicit Add-ons screen action; the last-known-good descriptors loaded
+            // from local storage are immediately usable for catalog and stream requests.
         }
 
         /// <summary>Fetches and validates an add-on manifest before adding the provider to local storage.</summary>

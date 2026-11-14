@@ -6,6 +6,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Animation;
 using Windows.UI;
 
 namespace StreamioX.App.Helpers
@@ -52,8 +53,7 @@ namespace StreamioX.App.Helpers
             {
                 scale.CenterX = control.ActualWidth / 2;
                 scale.CenterY = control.ActualHeight / 2;
-                scale.ScaleX = 1.05;
-                scale.ScaleY = 1.05;
+                AnimateScale(scale, 1.05);
 
                 if (control is Button button)
                 {
@@ -64,8 +64,7 @@ namespace StreamioX.App.Helpers
 
             control.LostFocus += (_, _) =>
             {
-                scale.ScaleX = 1.0;
-                scale.ScaleY = 1.0;
+                AnimateScale(scale, 1.0);
 
                 if (control is Button button)
                 {
@@ -73,6 +72,30 @@ namespace StreamioX.App.Helpers
                     button.BorderThickness = originalThickness;
                 }
             };
+        }
+
+        /// <summary>Animates controller focus scaling without blocking the UI thread.</summary>
+        private static void AnimateScale(ScaleTransform scale, double target)
+        {
+            var storyboard = new Storyboard();
+            var xAnimation = new DoubleAnimation
+            {
+                To = target,
+                Duration = new Duration(TimeSpan.FromMilliseconds(130))
+            };
+            var yAnimation = new DoubleAnimation
+            {
+                To = target,
+                Duration = new Duration(TimeSpan.FromMilliseconds(130))
+            };
+
+            Storyboard.SetTarget(xAnimation, scale);
+            Storyboard.SetTargetProperty(xAnimation, "ScaleX");
+            Storyboard.SetTarget(yAnimation, scale);
+            Storyboard.SetTargetProperty(yAnimation, "ScaleY");
+            storyboard.Children.Add(xAnimation);
+            storyboard.Children.Add(yAnimation);
+            storyboard.Begin();
         }
 
         /// <summary>Restores the previously focused control, falling back to the supplied default when needed.</summary>

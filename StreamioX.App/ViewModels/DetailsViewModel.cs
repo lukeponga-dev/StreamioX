@@ -27,6 +27,7 @@ namespace StreamioX.App.ViewModels
 
         [ObservableProperty] private Movie? selectedMovie;
         [ObservableProperty] private ObservableCollection<StreamSource> streams = new();
+        [ObservableProperty] public partial ObservableCollection<string> ProviderStatusLines { get; set; } = new();
         [ObservableProperty] private ObservableCollection<Video> episodes = new();
         [ObservableProperty] private Video? selectedEpisode;
         [ObservableProperty] private bool isLoadingStreams;
@@ -38,7 +39,7 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] public partial string ResumeButtonText { get; set; } = "Resume Watching";
         // Partial-property generation is WinRT/NativeAOT compatible.
         [ObservableProperty] public partial bool IsSeries { get; set; }
-        [ObservableProperty] private string libraryButtonText = "Add to Library";
+        [ObservableProperty] private string libraryButtonText = "＋  Add to Library";
         private LibraryEntry? _playbackEntry;
 
         // Flatten nested metadata into bindable page properties. This avoids UWP
@@ -81,6 +82,7 @@ namespace StreamioX.App.ViewModels
             var token = _loadCts.Token;
 
             movie.Type ??= "movie";
+            IsLoadingMetadata = true;
             SelectedMovie = movie;
             IsSeries = string.Equals(movie.Type, "series", StringComparison.OrdinalIgnoreCase);
             IsSavedInLibrary = await _libraryService.IsSavedAsync(movie.Type ?? "movie", movie.Id ?? string.Empty).ConfigureAwait(true);
@@ -89,10 +91,11 @@ namespace StreamioX.App.ViewModels
                 string.Equals(entry.Movie?.Id, movie.Id, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(entry.Movie?.Type ?? "movie", movie.Type ?? "movie", StringComparison.OrdinalIgnoreCase));
             IsResumeRequested = false;
-            LibraryButtonText = IsSavedInLibrary ? "Remove from Library" : "Add to Library";
+            LibraryButtonText = IsSavedInLibrary ? "✓  Remove from Library" : "＋  Add to Library";
             NotifyDetailsProperties();
             Episodes.Clear();
             Streams.Clear();
+            ProviderStatusLines.Clear();
             SelectedEpisode = null;
             ErrorMessage = null;
             UpdateResumeAvailability();
@@ -148,6 +151,32 @@ namespace StreamioX.App.ViewModels
         }
 
         [RelayCommand]
+        private async Task WatchNowAsync()
+        {
+            if (Streams.Count > 0)
+            {
+                await PlayStreamAsync(Streams[0]).ConfigureAwait(true);
+                return;
+            }
+
+            if (IsLoadingStreams)
+            {
+                ErrorMessage = "Still finding available streams. Choose a source as soon as one appears.";
+                return;
+            }
+            if (SelectedMovie == null)
+                return;
+
+            var contentId = SelectedEpisode?.Id ?? SelectedMovie.Id;
+            if (string.IsNullOrWhiteSpace(contentId))
+                return;
+
+            await LoadStreamsAsync(contentId, CancellationToken.None).ConfigureAwait(true);
+            if (Streams.Count > 0)
+                await PlayStreamAsync(Streams[0]).ConfigureAwait(true);
+        }
+
+        [RelayCommand]
         private async Task ToggleLibraryAsync()
         {
             if (SelectedMovie?.Id == null) return;
@@ -155,13 +184,13 @@ namespace StreamioX.App.ViewModels
             {
                 await _libraryService.RemoveAsync(SelectedMovie.Type ?? "movie", SelectedMovie.Id).ConfigureAwait(true);
                 IsSavedInLibrary = false;
-                LibraryButtonText = "Add to Library";
+                LibraryButtonText = "＋  Add to Library";
             }
             else
             {
                 await _libraryService.SaveAsync(SelectedMovie).ConfigureAwait(true);
                 IsSavedInLibrary = true;
-                LibraryButtonText = "Remove from Library";
+                LibraryButtonText = "✓  Remove from Library";
             }
         }
 
@@ -226,12 +255,14 @@ namespace StreamioX.App.ViewModels
             if (SelectedMovie == null || string.IsNullOrWhiteSpace(contentId)) return;
 
             _streamsCts?.Cancel();
-            _streamsCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var token = _streamsCts.Token;
+            var requestCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _streamsCts = requestCts;
+            var token = requestCts.Token;
 
             IsLoadingStreams = true;
             ErrorMessage = null;
             Streams.Clear();
+            ProviderStatusLines.Clear();
             try
             {
                 var fetched = await _streamService.GetFromInstalledAddonsAsync(
@@ -254,13 +285,42 @@ namespace StreamioX.App.ViewModels
                                 Windows.UI.Core.CoreDispatcherPriority.Normal,
                                 () =>
                                 {
+                                    if (token.IsCancellationRequested)
+                                        return;
                                     foreach (var stream in ordered)
                                     {
-                                        if (!Streams.Any(existing => ReferenceEquals(existing, stream)))
+                                        var key = !string.IsNullOrWhiteSpace(stream.Url) ? stream.Url.Trim()
+                                            : !string.IsNullOrWhiteSpace(stream.InfoHash) ? stream.InfoHash.Trim()
+                                            : stream.Title?.Trim() ?? string.Empty;
+                                        if (key.Length > 0 && !Streams.Any(existing =>
+                                            string.Equals(
+                                                !string.IsNullOrWhiteSpace(existing.Url) ? existing.Url.Trim()
+                                                    : !string.IsNullOrWhiteSpace(existing.InfoHash) ? existing.InfoHash.Trim()
+                                                    : existing.Title?.Trim() ?? string.Empty,
+                                                key,
+                                                StringComparison.OrdinalIgnoreCase)))
                                             Streams.Add(stream);
                                     }
                                 });
-                        _ = PreResolveTorrentUrlsAsync(ordered, token);
+                        // Do not start torrent engines during discovery. Torrent setup is deferred until playback.
+                    },
+                    async (providerName, state) =>
+                    {
+                        await Windows.ApplicationModel.Core.CoreApplication.MainView
+                            .CoreWindow.Dispatcher.RunAsync(
+                                Windows.UI.Core.CoreDispatcherPriority.Normal,
+                                () =>
+                                {
+                                    if (token.IsCancellationRequested)
+                                        return;
+                                    var prefix = providerName + " — ";
+                                    for (var index = ProviderStatusLines.Count - 1; index >= 0; index--)
+                                    {
+                                        if (ProviderStatusLines[index].StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                                            ProviderStatusLines.RemoveAt(index);
+                                    }
+                                    ProviderStatusLines.Add(prefix + state);
+                                });
                     }).ConfigureAwait(true);
 
                 // If no provider published a viable stream, retain a useful empty-state message.
@@ -271,7 +331,16 @@ namespace StreamioX.App.ViewModels
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { ErrorMessage = $"Failed to load streams: {ex.Message}"; }
-            finally { IsLoadingStreams = false; }
+            finally
+            {
+                // A cancelled earlier lookup must not hide the loading state of a newer request.
+                if (ReferenceEquals(_streamsCts, requestCts))
+                {
+                    IsLoadingStreams = false;
+                    _streamsCts = null;
+                }
+                requestCts.Dispose();
+            }
         }
 
         private static bool IsDirectHttpStream(StreamSource stream) =>
@@ -293,8 +362,7 @@ namespace StreamioX.App.ViewModels
                 var streams = await _streamService.GetFromInstalledAddonsAsync(
                     type,
                     episodeId,
-                    cancellationToken,
-                    providerStreams => PreResolveTorrentUrlsAsync(providerStreams, cancellationToken))
+                    cancellationToken)
                     .ConfigureAwait(false);
                 PlaybackDiagnostics.Write(
                     $"[Prefetch] Cached {streams.Count} stream result(s) for episode {episodeId}.");
@@ -303,37 +371,6 @@ namespace StreamioX.App.ViewModels
             catch (Exception ex)
             {
                 PlaybackDiagnostics.Write($"[Prefetch] Episode stream prefetch failed: {ex.Message}");
-            }
-        }
-
-        /// <summary>Resolves torrent sources ahead of playback to reduce delay when a stream is selected.</summary>
-        private async Task PreResolveTorrentUrlsAsync(
-            System.Collections.Generic.IReadOnlyList<StreamSource> streams,
-            CancellationToken cancellationToken)
-        {
-            foreach (var stream in streams)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    return;
-
-                var isDirectUrl = Uri.TryCreate(stream.Url, UriKind.Absolute, out var uri)
-                    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
-                var isMagnet = Uri.TryCreate(stream.Url, UriKind.Absolute, out var magnet)
-                    && string.Equals(magnet.Scheme, "magnet", StringComparison.OrdinalIgnoreCase);
-                if (isDirectUrl || (string.IsNullOrWhiteSpace(stream.InfoHash) && !isMagnet))
-                    continue;
-
-                try
-                {
-                    await _torrentBridgeService.GetStreamUrlAsync(stream, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) { return; }
-                catch (Exception ex)
-                {
-                    // A single unsupported torrent source must not block the remaining providers.
-                    PlaybackDiagnostics.Write($"[Prefetch] Torrent URL pre-resolution skipped: {ex.Message}");
-                }
             }
         }
 
