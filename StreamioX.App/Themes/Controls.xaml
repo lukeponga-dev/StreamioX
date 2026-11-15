@@ -1,10 +1,59 @@
-<!-- Purpose: Defines shared Controls theme resources so screens use consistent Xbox visual styling. -->
+<!-- Purpose: Defines shared Fluent-inspired button and card resources for desktop, TV, and Xbox layouts. -->
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Primary Button Style -->
+    <!-- Explicit content presenter prevents complex icon + label content from being
+         obscured by platform-specific button templates while retaining normal input states. -->
+    <ControlTemplate x:Key="FluentButtonTemplate" TargetType="Button">
+        <Border x:Name="ButtonBorder"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal"/>
+                    <VisualState x:Name="PointerOver">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="ButtonBorder"
+                                             Storyboard.TargetProperty="Opacity"
+                                             To="0.90" Duration="0:0:0.12"/>
+                        </Storyboard>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="ButtonBorder"
+                                             Storyboard.TargetProperty="Opacity"
+                                             To="0.76" Duration="0:0:0.06"/>
+                        </Storyboard>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="ButtonBorder"
+                                             Storyboard.TargetProperty="Opacity"
+                                             To="0.42" Duration="0:0:0.10"/>
+                        </Storyboard>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+            <ContentPresenter x:Name="ContentPresenter"
+                              Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              ContentTransitions="{TemplateBinding ContentTransitions}"
+                              Padding="{TemplateBinding Padding}"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                              Foreground="{TemplateBinding Foreground}"
+                              FontSize="{TemplateBinding FontSize}"
+                              FontWeight="{TemplateBinding FontWeight}"
+                              FontFamily="{TemplateBinding FontFamily}"/>
+        </Border>
+    </ControlTemplate>
+
+    <!-- Primary action: high contrast, explicit content rendering, and Xbox focus visuals. -->
     <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+        <Setter Property="Template" Value="{StaticResource FluentButtonTemplate}"/>
         <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
         <Setter Property="Foreground" Value="#FF06110A"/>
         <Setter Property="Padding" Value="24,12"/>
@@ -20,8 +69,9 @@
         <Setter Property="FontSize" Value="16"/>
     </Style>
 
-    <!-- Secondary Button Style -->
+    <!-- Secondary actions retain readable labels and consistent pointer/controller states. -->
     <Style x:Key="SecondaryButtonStyle" TargetType="Button">
+        <Setter Property="Template" Value="{StaticResource FluentButtonTemplate}"/>
         <Setter Property="Background" Value="#FF151B25"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderDefaultBrush}"/>

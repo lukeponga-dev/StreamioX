@@ -86,7 +86,7 @@ namespace StreamioX.App.Views
         {
             HeroTitle.Text = movie?.Title ?? (ViewModel.IsLoading ? "Finding your next favourite…" : "Discover something great");
             HeroMetadata.Text = movie == null ? string.Empty : BuildMetadata(movie);
-            HeroDescription.Text = movie?.Description ?? string.Empty;
+            HeroDescription.Text = movie?.Synopsis ?? string.Empty;
             HeroWatchButton.IsEnabled = movie != null;
 
             HeroBackdrop.Source = null;
@@ -168,11 +168,38 @@ namespace StreamioX.App.Views
                 FontSize = 17,
                 FontWeight = Windows.UI.Text.FontWeights.SemiBold
             });
+            if (!string.IsNullOrWhiteSpace(entry.Movie?.Synopsis))
+            {
+                details.Children.Add(new TextBlock
+                {
+                    Text = entry.Movie?.Synopsis ?? string.Empty,
+                    Foreground = new SolidColorBrush(Color.FromArgb(255, 195, 202, 207)),
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxHeight = 28
+                });
+            }
             details.Children.Add(new TextBlock
             {
                 Text = entry.ProgressText,
                 Foreground = new SolidColorBrush(Color.FromArgb(255, 208, 217, 220)),
                 FontSize = 12
+            });
+            if (!string.IsNullOrWhiteSpace(entry.ElapsedRuntimeText))
+            {
+                details.Children.Add(new TextBlock
+                {
+                    Text = entry.ElapsedRuntimeText,
+                    Foreground = new SolidColorBrush(Color.FromArgb(255, 205, 212, 220)),
+                    FontSize = 11
+                });
+            }
+            details.Children.Add(new TextBlock
+            {
+                Text = entry.LastWatchedText,
+                Foreground = new SolidColorBrush(Color.FromArgb(255, 160, 173, 179)),
+                FontSize = 11
             });
             details.Children.Add(new ProgressBar
             {

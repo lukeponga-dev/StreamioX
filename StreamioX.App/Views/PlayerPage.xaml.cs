@@ -27,6 +27,7 @@ namespace StreamioX.App.Views
         private MediaPlaybackItem? _playbackItem;
         private PlaybackRequest? _playbackRequest;
         private DateTimeOffset _lastProgressSaveUtc = DateTimeOffset.UtcNow;
+        private DateTimeOffset _resumeWaitStartedUtc = DateTimeOffset.UtcNow;
         private bool _resumeApplied = true;
         private bool _updatingProgressSlider;
 
@@ -82,8 +83,11 @@ namespace StreamioX.App.Views
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            Application.Current.Suspending -= App_Suspending;
+            Application.Current.Suspending += App_Suspending;
             _playbackRequest = e.Parameter as PlaybackRequest;
             _lastProgressSaveUtc = DateTimeOffset.UtcNow;
+            _resumeWaitStartedUtc = DateTimeOffset.UtcNow;
             _resumeApplied = (_playbackRequest?.ResumePositionSeconds ?? 0) <= 0;
             var streamUrl = _playbackRequest?.StreamUrl ?? e.Parameter as string;
             var title = _playbackRequest?.Title ?? "Now Playing";
@@ -236,6 +240,9 @@ namespace StreamioX.App.Views
             var session = _mediaPlayer.PlaybackSession;
             TryApplyResumePosition(session);
             ViewModel.UpdatePlaybackTime(session.Position, session.NaturalDuration);
+            ViewModel.UpdateBufferProgress(
+                session.BufferingProgress,
+                session.PlaybackState == MediaPlaybackState.Buffering);
 
             if (_resumeApplied && session.PlaybackState == MediaPlaybackState.Playing &&
                 DateTimeOffset.UtcNow - _lastProgressSaveUtc >= TimeSpan.FromSeconds(15))
@@ -324,7 +331,21 @@ namespace StreamioX.App.Views
             }
 
             if (session.NaturalDuration <= TimeSpan.Zero || !session.CanSeek)
+            {
+                // Some provider streams expose duration but do not support seeking.
+                // After a short grace period, continue from the beginning and allow
+                // normal progress persistence instead of disabling watch history forever.
+                if ((session.PlaybackState == MediaPlaybackState.Playing ||
+                     session.PlaybackState == MediaPlaybackState.Paused) &&
+                    DateTimeOffset.UtcNow - _resumeWaitStartedUtc >= TimeSpan.FromSeconds(8))
+                {
+                    _resumeApplied = true;
+                    ViewModel.SetStreamingStatus(
+                        "This stream cannot seek to your saved position. Playback started from the beginning.");
+                    PlaybackDiagnostics.Write("[Playback] Resume position unavailable: selected stream is not seekable.");
+                }
                 return;
+            }
 
             try
             {
@@ -338,6 +359,8 @@ namespace StreamioX.App.Views
             catch (Exception ex)
             {
                 _resumeApplied = true;
+                ViewModel.SetStreamingStatus(
+                    "Couldn't restore your saved position. Playback started from the beginning.");
                 PlaybackDiagnostics.Write($"[Playback] Could not restore resume position (0x{ex.HResult:X8}): {ex.Message}");
             }
         }
@@ -347,12 +370,16 @@ namespace StreamioX.App.Views
         {
             var request = _playbackRequest;
             if (request == null || string.IsNullOrWhiteSpace(request.Type) ||
-                string.IsNullOrWhiteSpace(request.Id) || !_resumeApplied)
+                string.IsNullOrWhiteSpace(request.Id))
+                return;
+
+            var session = _mediaPlayer.PlaybackSession;
+            TryApplyResumePosition(session);
+            if (!_resumeApplied)
                 return;
 
             // Capture the playback snapshot before awaiting storage so navigation
             // cannot clear MediaPlayer.Source before the final position is read.
-            var session = _mediaPlayer.PlaybackSession;
             var duration = session.NaturalDuration.TotalSeconds;
             var position = session.Position.TotalSeconds;
             if (duration <= 0 || double.IsNaN(duration) || double.IsInfinity(duration) ||
@@ -366,7 +393,7 @@ namespace StreamioX.App.Views
                 await _libraryService.UpdateProgressAsync(
                     request.Type,
                     request.Id,
-                    Math.Max(0, position),
+                    Math.Clamp(position, 0, duration),
                     duration,
                     request.EpisodeId,
                     request.Movie).ConfigureAwait(true);
@@ -404,10 +431,27 @@ namespace StreamioX.App.Views
 
         private void PlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
         {
-            PlaybackDiagnostics.Write($"[Playback] MediaPlayer state changed: {sender.PlaybackState}; position: {sender.Position}; duration: {sender.NaturalDuration}.");
+            // Snapshot WinRT values on the media callback thread. Do not capture the
+            // MediaPlaybackSession COM object and dereference it later on the XAML dispatcher.
+            MediaPlaybackState playbackState;
+            TimeSpan position;
+            TimeSpan duration;
+            try
+            {
+                playbackState = sender.PlaybackState;
+                position = sender.Position;
+                duration = sender.NaturalDuration;
+            }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.Write($"[Playback] Could not snapshot playback state (HRESULT 0x{ex.HResult:X8}): {ex}");
+                return;
+            }
+
+            PlaybackDiagnostics.Write($"[Playback] MediaPlayer state changed: {playbackState}; position: {position}; duration: {duration}.");
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
-                var isPlaying = sender.PlaybackState == MediaPlaybackState.Playing;
+                var isPlaying = playbackState == MediaPlaybackState.Playing;
                 ViewModel.SetPlaying(isPlaying);
                 if (isPlaying)
                 {
@@ -419,7 +463,7 @@ namespace StreamioX.App.Views
                 {
                     // Paused, buffering, and ended states keep the transport UI available.
                     ShowOsd();
-                    if (sender.PlaybackState == MediaPlaybackState.Paused && _resumeApplied)
+                    if (playbackState == MediaPlaybackState.Paused && _resumeApplied)
                         _ = SaveProgressAsync();
                 }
 
@@ -428,7 +472,7 @@ namespace StreamioX.App.Views
                 {
                     if (PlayPauseIcon != null)
                     {
-                        PlayPauseIcon.Glyph = sender.PlaybackState == MediaPlaybackState.Playing
+                        PlayPauseIcon.Glyph = playbackState == MediaPlaybackState.Playing
                             ? "\uE769"  // Pause icon
                             : "\uE768"; // Play icon
                     }
@@ -661,9 +705,23 @@ namespace StreamioX.App.Views
                 Frame.GoBack();
         }
 
+        private async void App_Suspending(object sender, Windows.ApplicationModel.SuspendingEventArgs e)
+        {
+            var deferral = e.SuspendingOperation.GetDeferral();
+            try
+            {
+                await SaveProgressAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                deferral.Complete();
+            }
+        }
+
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            Application.Current.Suspending -= App_Suspending;
             _ = SaveProgressAsync();
             _playbackTimer?.Stop();
             _osdTimer?.Stop();

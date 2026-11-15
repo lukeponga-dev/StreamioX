@@ -8,13 +8,18 @@ using System.Threading.Tasks;
 using StreamioX.App.Models;
 using StreamioX.App.Navigation;
 using StreamioX.App.Services;
+using WinRT;
 
 namespace StreamioX.App.ViewModels
 {
+    [GeneratedBindableCustomProperty]
     public partial class LibraryViewModel : ObservableObject
     {
         private readonly ILibraryService _library;
         private readonly INavigationService _navigation;
+
+        public IRelayCommand<LibraryEntry?> OpenEntryCommand { get; }
+        public IAsyncRelayCommand<LibraryEntry?> RemoveEntryCommand { get; }
 
         [ObservableProperty] public partial ObservableCollection<LibraryEntry> Entries { get; set; } = new();
         [ObservableProperty] public partial bool IsLoading { get; set; }
@@ -25,6 +30,8 @@ namespace StreamioX.App.ViewModels
         {
             _library = library;
             _navigation = navigation;
+            OpenEntryCommand = new RelayCommand<LibraryEntry?>(OpenEntry);
+            RemoveEntryCommand = new AsyncRelayCommand<LibraryEntry?>(RemoveEntry);
         }
 
         public async Task LoadAsync()
@@ -44,14 +51,18 @@ namespace StreamioX.App.ViewModels
             catch (Exception ex) { Status = $"Unable to load your library: {ex.Message}"; }
             finally { IsLoading = false; }
         }
-
-        [RelayCommand]
         private void OpenEntry(LibraryEntry? entry)
         {
-            if (entry?.Movie != null) _navigation.NavigateTo(NavigationRoute.Details, entry.Movie);
-        }
+            if (entry?.Movie == null)
+                return;
 
-        [RelayCommand]
+            var hasProgress = entry.DurationSeconds > 0 &&
+                entry.PositionSeconds > 0 &&
+                entry.PositionSeconds / entry.DurationSeconds < 0.95;
+            _navigation.NavigateTo(
+                NavigationRoute.Details,
+                new DetailsNavigationRequest(entry.Movie, resumeAutomatically: hasProgress));
+        }
         private async Task RemoveEntry(LibraryEntry? entry)
         {
             if (entry?.Movie?.Id == null) return;

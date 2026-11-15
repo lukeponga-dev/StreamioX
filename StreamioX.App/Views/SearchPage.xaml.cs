@@ -159,7 +159,20 @@ namespace StreamioX.App.Views
                 content.Children.Add(poster);
                 content.Children.Add(new TextBlock { Text = movie.Title ?? "Untitled", Foreground = new SolidColorBrush(Colors.White), FontSize = 13,
                     FontWeight = Windows.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, MaxHeight = 38, MaxWidth = 132 });
-                var card = new Button { Width = 146, MinHeight = 238, Margin = new Thickness(5), Padding = new Thickness(6),
+                if (!string.IsNullOrWhiteSpace(movie.Synopsis))
+                {
+                    content.Children.Add(new TextBlock
+                    {
+                        Text = movie.Synopsis,
+                        Foreground = new SolidColorBrush(Color.FromArgb(255, 178, 184, 197)),
+                        FontSize = 10,
+                        TextWrapping = TextWrapping.Wrap,
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        MaxHeight = 34,
+                        MaxWidth = 132
+                    });
+                }
+                var card = new Button { Width = 146, MinHeight = 278, Margin = new Thickness(5), Padding = new Thickness(6),
                     Background = new SolidColorBrush(Color.FromArgb(255, 23, 24, 39)),
                     BorderBrush = new SolidColorBrush(Color.FromArgb(255, 52, 48, 71)), BorderThickness = new Thickness(1), Content = content, Tag = movie };
                 card.Click += ResultCard_Click;

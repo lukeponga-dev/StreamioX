@@ -141,7 +141,15 @@ namespace StreamioX.App.ViewModels
 
         public void OpenLibraryEntry(LibraryEntry entry)
         {
-            if (entry?.Movie != null) OpenMovie(entry.Movie);
+            if (entry?.Movie == null)
+                return;
+
+            var hasProgress = entry.DurationSeconds > 0 &&
+                entry.PositionSeconds > 0 &&
+                entry.PositionSeconds / entry.DurationSeconds < 0.95;
+            _navigationService.NavigateTo(
+                NavigationRoute.Details,
+                new DetailsNavigationRequest(entry.Movie, resumeAutomatically: hasProgress));
         }
     }
 }

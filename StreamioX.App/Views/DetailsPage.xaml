@@ -7,7 +7,8 @@
     xmlns:helpers="using:StreamioX.App.Helpers"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     Background="Transparent"
-    XYFocusKeyboardNavigation="Enabled">
+    XYFocusKeyboardNavigation="Enabled"
+    KeyDown="Page_KeyDown">
     <Page.Resources>
         <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     </Page.Resources>
@@ -49,6 +50,8 @@
                 <TextBlock Text="{Binding ContentTypeText}" Foreground="{StaticResource FocusAccentBrush}" FontSize="13" FontWeight="Bold"/>
                 <TextBlock Text="{Binding RatingText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="15"/>
                 <TextBlock Text="{Binding RuntimeText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="14"/>
+                <TextBlock Text="{Binding SeasonCountText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="13"
+                           Visibility="{Binding IsSeries, Converter={StaticResource BoolToVisibilityConverter}}"/>
             </StackPanel>
 
             <ScrollViewer Grid.Column="1" Margin="28,0,0,0" VerticalScrollBarVisibility="Auto">
@@ -64,70 +67,268 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
+                    <ScrollViewer HorizontalScrollMode="Enabled"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollMode="Disabled"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  XYFocusKeyboardNavigation="Enabled"
+                                  IsTabStop="False">
+                        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
                         <Button x:Name="WatchNowButton"
                                 Command="{Binding WatchNowCommand}"
                                 Style="{StaticResource PrimaryButtonStyle}"
+                                AutomationProperties.Name="{Binding PrimaryActionText}"
                                 HorizontalAlignment="Left" MinWidth="176">
                             <StackPanel Orientation="Horizontal" Spacing="9">
-                                <SymbolIcon Symbol="Play" Width="18" Height="18"/>
-                                <TextBlock Text="Watch Now"/>
+                                <SymbolIcon Symbol="Play" Width="18" Height="18" Foreground="#FF06110A"/>
+                                <TextBlock Text="{Binding PrimaryActionText}" Foreground="#FF06110A" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="TrailerButton"
+                                Command="{Binding PlayTrailerCommand}"
+                                Visibility="{Binding HasTrailer, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                AutomationProperties.Name="Play trailer"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <SymbolIcon Symbol="Video" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Trailer" Foreground="{StaticResource TextPrimaryBrush}"/>
                             </StackPanel>
                         </Button>
                         <Button x:Name="LibraryButton" Content="{Binding LibraryButtonText}"
                                 Command="{Binding ToggleLibraryCommand}"
                                 Style="{StaticResource SecondaryButtonStyle}"
+                                AutomationProperties.Name="{Binding LibraryButtonText}"
                                 HorizontalAlignment="Left"/>
+                        <Button x:Name="MarkWatchedButton"
+                                Command="{Binding MarkWatchedCommand}"
+                                Visibility="{Binding CanMarkWatched, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                AutomationProperties.Name="Mark watched"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <SymbolIcon Symbol="Accept" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Mark Watched" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ShareButton" Click="ShareButton_Click"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                AutomationProperties.Name="Share title"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <SymbolIcon Symbol="Share" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Share" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            </StackPanel>
+                        </Button>
                         <Button x:Name="ResumeButton"
                                 Click="ResumeButton_Click"
                                 Visibility="{Binding HasResumeProgress, Converter={StaticResource BoolToVisibilityConverter}}"
                                 Style="{StaticResource SecondaryButtonStyle}"
+                                AutomationProperties.Name="{Binding ResumeButtonText}"
                                 HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <SymbolIcon Symbol="Play" Width="16" Height="16"/>
-                                <TextBlock Text="{Binding ResumeButtonText}"/>
+                                <SymbolIcon Symbol="Play" Width="16" Height="16" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="{Binding ResumeButtonText}" Foreground="{StaticResource TextPrimaryBrush}"/>
                             </StackPanel>
                         </Button>
-                    </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Border Background="#171923" BorderBrush="#39334F" BorderThickness="1"
+                            CornerRadius="8" Padding="12"
+                            Visibility="{Binding HasResumeProgress, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{Binding ResumeProgressText}"
+                                       Foreground="{StaticResource TextPrimaryBrush}" FontSize="14"/>
+                            <ProgressBar Minimum="0" Maximum="100"
+                                         Value="{Binding ResumeProgressPercent}"
+                                         Height="6" Foreground="{StaticResource AccentBrush}"
+                                         Background="#394553"/>
+                        </StackPanel>
+                    </Border>
 
                     <StackPanel Spacing="8" MaxWidth="1000">
                         <TextBlock Text="Synopsis" Foreground="{StaticResource TextPrimaryBrush}" FontSize="21" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding DescriptionText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="16" TextWrapping="Wrap" LineHeight="24" MaxWidth="1000"/>
                     </StackPanel>
 
-                    <StackPanel x:Name="EpisodesSection" Spacing="12"
+                    <StackPanel x:Name="EpisodesSection" Spacing="14"
                                 Visibility="{Binding IsSeries, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <TextBlock Text="Episodes" Foreground="{StaticResource TextPrimaryBrush}" FontSize="21" FontWeight="SemiBold"/>
-                        <ScrollViewer HorizontalScrollMode="Enabled"
-                                      HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollMode="Disabled"
-                                      VerticalScrollBarVisibility="Disabled">
-                            <controls:ItemsRepeater x:Name="EpisodesRepeater" ItemsSource="{Binding Episodes}">
-                                <controls:ItemsRepeater.Layout>
-                                    <controls:StackLayout Orientation="Horizontal" Spacing="8"/>
-                                </controls:ItemsRepeater.Layout>
-                                <controls:ItemsRepeater.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Tag="{Binding}" Click="EpisodeButton_Click"
-                                                Width="300" Height="88"
-                                                HorizontalContentAlignment="Left" Padding="12,8"
-                                                Background="#161B25" BorderBrush="#394553"
-                                                BorderThickness="1"
-                                                Style="{StaticResource SecondaryButtonStyle}">
-                                            <StackPanel Spacing="4">
-                                                <TextBlock Text="{Binding Title, FallbackValue='Episode'}"
-                                                           Foreground="{StaticResource TextPrimaryBrush}"
-                                                           FontSize="16" FontWeight="SemiBold"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding Overview}"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                                           FontSize="13" TextWrapping="Wrap" MaxHeight="48"/>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Episodes" Foreground="{StaticResource TextPrimaryBrush}" FontSize="23" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding SeasonCountText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="13"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10"
+                                    Visibility="{Binding IsLoadingMetadata, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Border Width="280" Height="160" CornerRadius="8" Background="#202630"/>
+                            <Border Width="280" Height="160" CornerRadius="8" Background="#202630"/>
+                            <Border Width="280" Height="160" CornerRadius="8" Background="#202630"/>
+                        </StackPanel>
+
+                        <Border Background="#171923" BorderBrush="#39334F" BorderThickness="1"
+                                CornerRadius="10" Padding="16"
+                                Visibility="{Binding HasResumeProgress, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="CONTINUE WATCHING" Foreground="{StaticResource FocusAccentBrush}" FontSize="12" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding ContinueWatchingEpisodeText}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="18" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding ContinueWatchingTimeText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="13"/>
+                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding ResumeProgressPercent}"
+                                                 Height="6" Foreground="{StaticResource AccentBrush}" Background="#394553"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Content="Resume" Command="{Binding ResumeWatchingCommand}"
+                                            Style="{StaticResource PrimaryButtonStyle}" MinWidth="112"/>
+                                    <Button Content="Start Episode" Click="StartEpisode_Click"
+                                            Style="{StaticResource SecondaryButtonStyle}" MinWidth="132"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="SEASON" Foreground="{StaticResource TextTertiaryBrush}" FontSize="12"
+                                       FontWeight="Bold" VerticalAlignment="Center"/>
+                            <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled"
+                                          IsTabStop="False">
+                                <ItemsControl x:Name="SeasonSelector" ItemsSource="{Binding Seasons}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="8"/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Content="{Binding}" Tag="{Binding}" Click="SeasonButton_Click"
+                                                    MinWidth="104" MinHeight="48" Padding="16,8"
+                                                    Background="#202433" Foreground="{StaticResource TextPrimaryBrush}"
+                                                    BorderBrush="#45405F" BorderThickness="1"
+                                                    XYFocusKeyboardNavigation="Enabled"
+                                                    UseSystemFocusVisuals="True"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                    Visibility="{Binding IsLoadingSeasons, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Border Width="104" Height="48" CornerRadius="8" Background="#252A38"/>
+                            <Border Width="104" Height="48" CornerRadius="8" Background="#252A38"/>
+                            <Border Width="104" Height="48" CornerRadius="8" Background="#252A38"/>
+                        </StackPanel>
+
+                        <Border Background="#171923" BorderBrush="#39334F" BorderThickness="1"
+                                CornerRadius="8" Padding="12"
+                                Visibility="{Binding HasSelectedEpisode, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding SelectedEpisodeCode}" Foreground="{StaticResource FocusAccentBrush}"
+                                           FontSize="12" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding SelectedEpisodeTitle}" Foreground="{StaticResource TextPrimaryBrush}"
+                                           FontSize="17" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding SelectedEpisodeRuntimeText}" Foreground="{StaticResource TextTertiaryBrush}"
+                                           FontSize="12"/>
+                                <TextBlock Text="{Binding SelectedEpisodeOverview}" Foreground="{StaticResource TextSecondaryBrush}"
+                                           FontSize="13" TextWrapping="Wrap" MaxLines="2"/>
+                            </StackPanel>
+                        </Border>
+
+                        <GridView x:Name="EpisodeGrid" ItemsSource="{Binding SeasonEpisodes}"
+                                  SelectionMode="None" IsItemClickEnabled="False"
+                                  IsTabStop="True" Height="370"
+                                  ScrollViewer.HorizontalScrollMode="Enabled"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                  ScrollViewer.VerticalScrollMode="Disabled"
+                                  ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                  XYFocusKeyboardNavigation="Enabled">
+                            <GridView.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="2"/>
+                                </ItemsPanelTemplate>
+                            </GridView.ItemsPanel>
+                            <GridView.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Tag="{Binding}" Click="EpisodeButton_Click" GotFocus="EpisodeCard_GotFocus"
+                                            Width="300" Height="166" Margin="0,0,12,10" Padding="0"
+                                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                            Background="#171B27" BorderBrush="#3A4054" BorderThickness="1"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            XYFocusKeyboardNavigation="Enabled" UseSystemFocusVisuals="True">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="82"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid>
+                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                <Border Background="#CC080A11" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                        Margin="8" Padding="7,3" CornerRadius="4">
+                                                    <TextBlock Text="{Binding EpisodeCode}" Foreground="White" FontSize="12" FontWeight="Bold"/>
+                                                </Border>
+                                                <TextBlock Text="✓ WATCHED" Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8"
+                                                           Foreground="#FF64D99A" FontSize="11" FontWeight="Bold"/>
+                                            </Grid>
+                                            <StackPanel Grid.Row="1" Margin="10,6" Spacing="3">
+                                                <TextBlock Text="{Binding Title}" Foreground="{StaticResource TextPrimaryBrush}"
+                                                           FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding RuntimeText}" Foreground="{StaticResource TextTertiaryBrush}" FontSize="11"/>
+                                                <TextBlock Text="{Binding AirDateText}" Foreground="{StaticResource TextTertiaryBrush}" FontSize="11"/>
+                                                <TextBlock Text="{Binding ProgressText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                                <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}"
+                                                             Height="4" Foreground="{StaticResource AccentBrush}" Background="#394553"/>
                                             </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </controls:ItemsRepeater.ItemTemplate>
-                            </controls:ItemsRepeater>
-                        </ScrollViewer>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                    Visibility="{Binding IsLoadingEpisodes, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Border Width="300" Height="166" CornerRadius="8" Background="#252A38"/>
+                            <Border Width="300" Height="166" CornerRadius="8" Background="#252A38"/>
+                        </StackPanel>
+                        <TextBlock Text="No episodes are available for this season."
+                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="14"
+                                   Visibility="{Binding HasNoSeasonEpisodes, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <Border Background="#171923" BorderBrush="#554A79" BorderThickness="1"
+                                CornerRadius="10" Padding="16"
+                                Visibility="{Binding IsEpisodeDetailsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="5">
+                                    <TextBlock Text="{Binding SelectedEpisodeCode}" Foreground="{StaticResource FocusAccentBrush}" FontSize="12" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding SelectedEpisodeTitle}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="19" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding SelectedEpisodeRuntimeText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                                    <TextBlock Text="{Binding SelectedEpisodeAirDateText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                                    <TextBlock Text="{Binding SelectedEpisodeOverview}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="13"
+                                               TextWrapping="Wrap" MaxLines="3"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Content="Play Episode" Click="PlaySelectedEpisode_Click"
+                                            Style="{StaticResource PrimaryButtonStyle}" MinWidth="140"/>
+                                    <Button Content="Resume Episode" Click="ResumeSelectedEpisode_Click"
+                                            Visibility="{Binding CanResumeSelectedEpisode, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            Style="{StaticResource SecondaryButtonStyle}" MinWidth="144"/>
+                                    <Button Content="Mark Watched" Command="{Binding MarkWatchedCommand}"
+                                            Visibility="{Binding CanMarkWatched, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            Style="{StaticResource SecondaryButtonStyle}" MinWidth="128"/>
+                                    <Button Content="Mark Unwatched" Command="{Binding MarkUnwatchedCommand}"
+                                            Visibility="{Binding CanMarkUnwatched, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            Style="{StaticResource SecondaryButtonStyle}" MinWidth="140"/>
+                                    <Button Content="Close" Click="CloseEpisodeDetails_Click"
+                                            Style="{StaticResource SecondaryButtonStyle}" MinWidth="80"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
                     <StackPanel Spacing="10">
@@ -145,6 +346,11 @@
                                            Foreground="{StaticResource TextPrimaryBrush}"
                                            FontSize="17" FontWeight="SemiBold"
                                            HorizontalAlignment="Center"/>
+                                <Button Content="Cancel search"
+                                        Command="{Binding CancelStreamSearchCommand}"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        MinWidth="120" HorizontalAlignment="Center"
+                                        AutomationProperties.Name="Cancel stream search"/>
                             </StackPanel>
                         </Border>
                         <ItemsControl ItemsSource="{Binding ProviderStatusLines}">
@@ -156,6 +362,13 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <TextBlock Text="{Binding ErrorMessage}" Foreground="#FFFF9B8F" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="10"
+                                    Visibility="{Binding IsLoadingStreams, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Border Width="190" Height="72" CornerRadius="8" Background="#202630"/>
+                            <Border Width="190" Height="72" CornerRadius="8" Background="#202630"/>
+                            <Border Width="190" Height="72" CornerRadius="8" Background="#202630"/>
+                        </StackPanel>
                         <Border x:Name="StreamDetailsPanel" Background="#151725" BorderBrush="#4B4568"
                                 BorderThickness="1" CornerRadius="8" Padding="10" Visibility="Collapsed">
                             <StackPanel Spacing="4">

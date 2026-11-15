@@ -68,46 +68,59 @@ namespace StreamioX.App.Services
             if (providers.Length == 0)
                 return Array.Empty<StreamSource>();
 
+            // Bound concurrent provider requests. Sorting by observed latency now
+            // prioritizes the fastest providers while keeping the UI responsive.
+            using var providerGate = new SemaphoreSlim(Math.Min(4, providers.Length));
             var tasks = providers.Select(async addon =>
             {
-                var providerName = string.IsNullOrWhiteSpace(addon.Name) ? addon.Id : addon.Name;
-                var started = DateTimeOffset.UtcNow;
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(ProviderTimeout);
-
+                await providerGate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    if (onProviderStatus != null)
-                        await onProviderStatus(providerName, "Searching").ConfigureAwait(false);
+                    var providerName = string.IsNullOrWhiteSpace(addon.Name) ? addon.Id : addon.Name;
+                    var started = DateTimeOffset.UtcNow;
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeout.CancelAfter(ProviderTimeout);
 
-                    var streams = await GetStreamsAsync(addon.BaseUrl, type, id, timeout.Token)
-                        .ConfigureAwait(false);
-                    ProviderLatencyMs[addon.Id] = Math.Max(1, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
+                    try
+                    {
+                        if (onProviderStatus != null)
+                            await onProviderStatus(providerName, "Searching").ConfigureAwait(false);
 
-                    if (onProviderResult != null)
-                        await onProviderResult(streams).ConfigureAwait(false);
-                    if (onProviderStatus != null)
-                        await onProviderStatus(providerName, "Complete").ConfigureAwait(false);
+                        var streams = await GetStreamsAsync(addon.BaseUrl, type, id, timeout.Token)
+                            .ConfigureAwait(false);
+                        ProviderLatencyMs[addon.Id] = Math.Max(
+                            1,
+                            (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
 
-                    return streams;
+                        if (onProviderResult != null)
+                            await onProviderResult(streams).ConfigureAwait(false);
+                        if (onProviderStatus != null)
+                            await onProviderStatus(providerName, "Complete").ConfigureAwait(false);
+
+                        return streams;
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        if (onProviderStatus != null)
+                            await onProviderStatus(providerName, "Cancelled").ConfigureAwait(false);
+                        throw;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        if (onProviderStatus != null)
+                            await onProviderStatus(providerName, "Timed out").ConfigureAwait(false);
+                        return (IReadOnlyList<StreamSource>)Array.Empty<StreamSource>();
+                    }
+                    catch (Exception)
+                    {
+                        if (onProviderStatus != null)
+                            await onProviderStatus(providerName, "Failed").ConfigureAwait(false);
+                        return (IReadOnlyList<StreamSource>)Array.Empty<StreamSource>();
+                    }
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                finally
                 {
-                    if (onProviderStatus != null)
-                        await onProviderStatus(providerName, "Cancelled").ConfigureAwait(false);
-                    throw;
-                }
-                catch (OperationCanceledException)
-                {
-                    if (onProviderStatus != null)
-                        await onProviderStatus(providerName, "Timed out").ConfigureAwait(false);
-                    return (IReadOnlyList<StreamSource>)Array.Empty<StreamSource>();
-                }
-                catch (Exception)
-                {
-                    if (onProviderStatus != null)
-                        await onProviderStatus(providerName, "Failed").ConfigureAwait(false);
-                    return (IReadOnlyList<StreamSource>)Array.Empty<StreamSource>();
+                    providerGate.Release();
                 }
             }).ToArray();
 

@@ -2,9 +2,11 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
+using WinRT;
 
 namespace StreamioX.App.ViewModels
 {
+    [GeneratedBindableCustomProperty]
     public partial class PlayerViewModel : ObservableObject
     {
         [ObservableProperty] public partial string MediaTitle { get; set; } = "Now Playing";
@@ -18,6 +20,8 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] public partial string RemainingTime { get; set; } = "-00:00";
         [ObservableProperty] public partial string CurrentTimeDisplay { get; set; } = "00:00 / 00:00";
         [ObservableProperty] public partial double PlaybackProgress { get; set; }
+        [ObservableProperty] public partial double BufferProgressPercent { get; set; }
+        [ObservableProperty] public partial bool IsBuffering { get; set; }
 
         /// <summary>Sets the selected stream and display metadata before playback begins.</summary>
         public void LoadStream(string streamUrl, string title, string? series = null)
@@ -27,6 +31,8 @@ namespace StreamioX.App.ViewModels
             SeriesTitle = series ?? "StreamioX";
             IsPlaying = false;
             PlaybackError = null;
+            BufferProgressPercent = 0;
+            IsBuffering = false;
             StreamingStatus = "Initializing stream...";
         }
 
@@ -47,7 +53,18 @@ namespace StreamioX.App.ViewModels
             var remaining = TimeSpan.FromSeconds(Math.Max(0, total.TotalSeconds - current.TotalSeconds));
             RemainingTime = $"-{FormatTime(remaining)}";
             CurrentTimeDisplay = $"{FormatTime(current)} / {FormatTime(total)}";
-            PlaybackProgress = total.TotalSeconds > 0 ? (current.TotalSeconds / total.TotalSeconds) * 100 : 0;
+            PlaybackProgress = total.TotalSeconds > 0
+                ? Math.Clamp((current.TotalSeconds / total.TotalSeconds) * 100, 0, 100)
+                : 0;
+        }
+
+        /// <summary>Updates the media engine's buffered percentage and buffering state.</summary>
+        public void UpdateBufferProgress(double progress, bool isBuffering)
+        {
+            BufferProgressPercent = double.IsFinite(progress)
+                ? Math.Clamp(progress * 100, 0, 100)
+                : 0;
+            IsBuffering = isBuffering;
         }
 
         public void SetStreamingStatus(string status)

@@ -63,6 +63,11 @@
                                 ValueChanged="ProgressSlider_ValueChanged"
                                 ToolTipService.ToolTip="{Binding CurrentTimeDisplay, FallbackValue='00:00 / 00:00'}"
                                 Style="{StaticResource XboxFocusCardStyle}"/>
+                        <ProgressBar Minimum="0" Maximum="100"
+                                     Value="{Binding BufferProgressPercent}"
+                                     IsIndeterminate="{Binding IsBuffering}"
+                                     Height="3" Background="#29313B"
+                                     Foreground="{StaticResource TextSecondaryBrush}"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -71,6 +76,9 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="{Binding CurrentTime, FallbackValue='00:00'}"
                                        Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                            <TextBlock Grid.Column="1" Text="{Binding TotalTime, FallbackValue='00:00'}"
+                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"
+                                       HorizontalAlignment="Center"/>
                             <TextBlock Grid.Column="2"
                                        Text="{Binding RemainingTime, FallbackValue='-00:00'}"
                                        Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>

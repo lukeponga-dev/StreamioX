@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StreamioX.App;
+using StreamioX.App.Models;
 using StreamioX.App.Navigation;
 using StreamioX.App.Services;
 using StreamioX.App.ViewModels;
@@ -140,11 +141,38 @@ public sealed class DependencyInjectionTests
         using var provider = BuildProvider();
         var sharedClient = provider.GetRequiredService<HttpClient>();
         var typedClient = provider.GetRequiredService<StremioClient>();
+        var factory = provider.GetRequiredService<IHttpClientFactory>();
 
+        Assert.NotNull(factory.CreateClient("StremioAuth"));
         Assert.Equal(TimeSpan.FromSeconds(30), sharedClient.Timeout);
         Assert.Contains(sharedClient.DefaultRequestHeaders.UserAgent,
             value => value.ToString().Contains("StreamioX", StringComparison.Ordinal));
         Assert.NotNull(typedClient);
+    }
+
+    [Fact]
+    public void SourceGeneratedJsonContext_ContainsTransportDtosAndSynopsisAliases()
+    {
+        var registeredTypes = new[]
+        {
+            typeof(CatalogResponse), typeof(MetaResponse), typeof(Movie),
+            typeof(Video), typeof(StreamResponse), typeof(StreamSource),
+            typeof(StreamBehaviorHints), typeof(StreamProxyHeaders)
+        };
+
+        foreach (var type in registeredTypes)
+            Assert.NotNull(StreamioX.App.Models.StremioJsonContext.Default.GetTypeInfo(type));
+
+        const string json = """{"id":"tt123","type":"movie","overview":"TMDB overview","plot":"Alternate plot","trailer":{"url":"https://example.com/trailer.mp4"}}""";
+        var movie = System.Text.Json.JsonSerializer.Deserialize(
+            json,
+            StreamioX.App.Models.StremioJsonContext.Default.Movie);
+
+        Assert.NotNull(movie);
+        Assert.Equal("TMDB overview", movie.Overview);
+        Assert.Equal("Alternate plot", movie.Plot);
+        Assert.Equal("TMDB overview", movie.Synopsis);
+        Assert.Equal("https://example.com/trailer.mp4", movie.TrailerLink);
     }
 
     [Fact]

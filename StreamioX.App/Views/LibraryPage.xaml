@@ -44,7 +44,15 @@
                                             </Border>
                                         </Grid>
                                     </Button>
+                                    <TextBlock Text="{Binding Movie.Synopsis}" Foreground="{StaticResource TextSecondaryBrush}"
+                                               FontSize="11" TextWrapping="Wrap" MaxLines="3"
+                                               TextTrimming="CharacterEllipsis" MaxHeight="42"/>
                                     <TextBlock Text="{Binding ProgressText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding ElapsedRuntimeText}" Foreground="{StaticResource TextTertiaryBrush}" FontSize="11"/>
+                                    <TextBlock Text="{Binding LastWatchedText}" Foreground="{StaticResource TextTertiaryBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}"
+                                                 Height="5" Foreground="{StaticResource AccentBrush}"
+                                                 Background="#394553"/>
                                     <Button Content="Remove" Tag="{Binding}" Click="RemoveEntry_Click" HorizontalAlignment="Left" Padding="10,5" Background="{StaticResource SurfaceBrush}" Foreground="{StaticResource TextSecondaryBrush}"/>
                                 </StackPanel>
                             </Grid>

@@ -47,14 +47,16 @@ namespace StreamioX.App
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
             });
 
-            // Auth and device-link APIs share a single configured client.
-            services.AddSingleton(provider =>
+            // Auth uses a named factory client so sockets/handlers are pooled and
+            // DNS changes are observed without constructing a raw HttpClient.
+            services.AddHttpClient("StremioAuth", (provider, client) =>
             {
                 var options = provider.GetRequiredService<IOptions<StreamioXOptions>>().Value;
-                var client = new HttpClient { Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds) };
+                client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
-                return client;
             });
+            services.AddSingleton(provider =>
+                provider.GetRequiredService<IHttpClientFactory>().CreateClient("StremioAuth"));
 
             services.AddSingleton<INavigationService, NavigationService>();
             services.AddSingleton<IAuthService, AuthService>();

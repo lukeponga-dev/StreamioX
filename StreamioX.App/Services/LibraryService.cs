@@ -16,13 +16,6 @@ namespace StreamioX.App.Services
     {
         private const string FileName = "library.json";
         private readonly SemaphoreSlim _gate = new(1, 1);
-        private static readonly JsonSerializerOptions Options = new()
-        {
-            PropertyNameCaseInsensitive = true,
-            WriteIndented = false,
-            TypeInfoResolver = StremioJsonContext.Default
-        };
-
         public async Task<IReadOnlyList<LibraryEntry>> GetEntriesAsync()
         {
             await _gate.WaitAsync().ConfigureAwait(false);
@@ -72,7 +65,9 @@ namespace StreamioX.App.Services
         public async Task UpdateProgressAsync(string type, string id, double positionSeconds, double durationSeconds,
             string? episodeId = null, Movie? movie = null)
         {
-            if (string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(id))
+            if (string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(id) ||
+                !double.IsFinite(positionSeconds) || !double.IsFinite(durationSeconds) ||
+                durationSeconds <= 0)
                 return;
 
             await _gate.WaitAsync().ConfigureAwait(false);
@@ -98,10 +93,20 @@ namespace StreamioX.App.Services
                 {
                     if (movie != null)
                         entry.Movie = movie;
-                    entry.PositionSeconds = Math.Max(0, positionSeconds);
-                    entry.DurationSeconds = Math.Max(0, durationSeconds);
+                    entry.PositionSeconds = Math.Clamp(positionSeconds, 0, durationSeconds);
+                    entry.DurationSeconds = durationSeconds;
                     entry.LastEpisodeId = episodeId;
                     entry.LastPlayedUtc = DateTimeOffset.UtcNow;
+                    if (!string.IsNullOrWhiteSpace(episodeId))
+                    {
+                        entry.EpisodeProgress ??= new Dictionary<string, EpisodeWatchProgress>(StringComparer.OrdinalIgnoreCase);
+                        entry.EpisodeProgress[episodeId] = new EpisodeWatchProgress
+                        {
+                            PositionSeconds = entry.PositionSeconds,
+                            DurationSeconds = entry.DurationSeconds,
+                            LastPlayedUtc = entry.LastPlayedUtc
+                        };
+                    }
                     await SaveFileAsync(entries).ConfigureAwait(false);
                 }
             }
@@ -123,7 +128,28 @@ namespace StreamioX.App.Services
                     ?? throw new NotSupportedException("Library JSON metadata is unavailable.");
                 return JsonSerializer.Deserialize(await File.ReadAllTextAsync(path).ConfigureAwait(false), info) ?? new List<LibraryEntry>();
             }
-            catch (FileNotFoundException) { return new List<LibraryEntry>(); }
+            catch (FileNotFoundException)
+            {
+                return new List<LibraryEntry>();
+            }
+            catch (JsonException ex)
+            {
+                var path = Path.Combine(ApplicationData.Current.LocalFolder.Path, FileName);
+                var recoveryPath = path + ".corrupt-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss");
+                PlaybackDiagnostics.Write($"[Library] Saved data was invalid JSON and could not be loaded: {ex.Message}");
+
+                try
+                {
+                    if (File.Exists(path))
+                        File.Move(path, recoveryPath, overwrite: true);
+                }
+                catch (Exception recoveryException)
+                {
+                    PlaybackDiagnostics.Write($"[Library] Could not preserve the invalid library file: {recoveryException.Message}");
+                }
+
+                return new List<LibraryEntry>();
+            }
         }
 
         /// <summary>Writes the updated library snapshot to local storage.</summary>
@@ -134,9 +160,26 @@ namespace StreamioX.App.Services
                 ?? throw new NotSupportedException("Library JSON metadata is unavailable.");
             var json = JsonSerializer.Serialize(entries, info);
             var temp = path + ".tmp";
-            await File.WriteAllTextAsync(temp, json).ConfigureAwait(false);
-            if (File.Exists(path)) File.Delete(path);
-            File.Move(temp, path);
+            try
+            {
+                await File.WriteAllTextAsync(temp, json).ConfigureAwait(false);
+                // Same-volume overwrite avoids the delete-then-move data-loss window.
+                File.Move(temp, path, overwrite: true);
+            }
+            catch
+            {
+                try
+                {
+                    if (File.Exists(temp))
+                        File.Delete(temp);
+                }
+                catch (Exception cleanupException)
+                {
+                    PlaybackDiagnostics.Write($"[Library] Temporary file cleanup failed: {cleanupException.Message}");
+                }
+
+                throw;
+            }
         }
     }
 }
