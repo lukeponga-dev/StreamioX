@@ -8,6 +8,7 @@ using Windows.ApplicationModel.Activation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
+using Windows.System.Profile;
 
 namespace StreamioX.App
 {
@@ -15,42 +16,87 @@ namespace StreamioX.App
     {
         public App()
         {
-            this.InitializeComponent();
+            // Capture the original managed/WinRT exception before XAML's global
+            // UnhandledException callback wraps or re-reports it.
+            AppDomain.CurrentDomain.FirstChanceException += OnFirstChanceException;
 
-            this.RequiresPointerMode = ApplicationRequiresPointerMode.WhenRequested;
-            this.Suspending += OnSuspending;
-            this.Resuming += OnResuming;
+            try
+            {
+                StartupDiagnostics.Write("App constructor: before InitializeComponent");
+                InitializeComponent();
+                UnhandledException += OnUnhandledException;
+                StartupDiagnostics.Write("App constructor: InitializeComponent completed; exception diagnostics attached");
 
-            AppServices.Configure();
+                // RequiresPointerMode is only supported by the Xbox device family.
+                // Setting it on desktop Windows can fail during UWP activation with E_NOINTERFACE.
+                if (AnalyticsInfo.VersionInfo.DeviceFamily == "Windows.Xbox")
+                {
+                    RequiresPointerMode = ApplicationRequiresPointerMode.WhenRequested;
+                }
+                Suspending += OnSuspending;
+                Resuming += OnResuming;
+
+                StartupDiagnostics.Write("App constructor: before AppServices.Configure");
+                AppServices.Configure();
+                StartupDiagnostics.Write("App constructor: AppServices.Configure completed");
+            }
+            catch (Exception ex)
+            {
+                StartupDiagnostics.Write("App constructor FAILED", ex);
+                throw;
+            }
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
-            // Defer media-pipeline and add-on initialization until those features are
-            // actually opened. Starting them here competes with first-page rendering.
-            Frame? rootFrame = Window.Current.Content as Frame;
-
-            if (rootFrame == null)
+            try
             {
-                rootFrame = new Frame();
-                rootFrame.NavigationFailed += OnNavigationFailed;
+                StartupDiagnostics.Write("OnLaunched: entered");
+                Frame? rootFrame = Window.Current.Content as Frame;
 
-                if (e.PreviousExecutionState == ApplicationExecutionState.Terminated)
+                if (rootFrame == null)
                 {
-                    // TODO: Load state from previously suspended application
+                    StartupDiagnostics.Write("OnLaunched: creating root Frame");
+                    rootFrame = new Frame();
+                    rootFrame.NavigationFailed += OnNavigationFailed;
+                    Window.Current.Content = rootFrame;
                 }
 
-                Window.Current.Content = rootFrame;
-            }
+                if (rootFrame.Content == null)
+                {
+                    StartupDiagnostics.Write("OnLaunched: before MainPage navigation");
+                    rootFrame.Navigate(typeof(MainPage), e.Arguments);
+                    StartupDiagnostics.Write("OnLaunched: MainPage navigation returned");
+                }
 
-            if (rootFrame.Content == null)
+                Window.Current.Activate();
+                StartupDiagnostics.Write("OnLaunched: Window activated");
+            }
+            catch (Exception ex)
             {
-                rootFrame.Navigate(typeof(MainPage), e.Arguments);
+                StartupDiagnostics.Write("OnLaunched FAILED", ex);
+                throw;
             }
+        }
 
-            Window.Current.Activate();
+        private void OnFirstChanceException(object? sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs e)
+        {
+            // Keep the log focused: first-chance events can be very noisy in XAML apps.
+            if (e.Exception.HResult == unchecked((int)0x80004002) ||
+                e.Exception is System.Runtime.InteropServices.COMException)
+            {
+                StartupDiagnostics.Write(
+                    $"FIRST-CHANCE COM/WinRT exception (0x{e.Exception.HResult:X8})",
+                    e.Exception);
+            }
+        }
 
-            // TorrentBridgeService starts on demand when a torrent stream is selected.
+        private void OnUnhandledException(object sender, Windows.UI.Xaml.UnhandledExceptionEventArgs e)
+        {
+            // Observe only. Do not mark the exception handled or hide the crash.
+            StartupDiagnostics.Write(
+                $"XAML UNHANDLED EXCEPTION (0x{e.Exception.HResult:X8}; handled={e.Handled})",
+                e.Exception);
         }
 
         private void OnResuming(object? sender, object e)
@@ -60,7 +106,9 @@ namespace StreamioX.App
 
         private void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
         {
-            throw new Exception("Failed to load Page " + e.SourcePageType.FullName);
+            StartupDiagnostics.Write("Root frame navigation FAILED",
+                new Exception($"Failed to load Page {e.SourcePageType?.FullName}", e.Exception));
+            throw new Exception("Failed to load Page " + e.SourcePageType.FullName, e.Exception);
         }
 
         /// <summary>Persists application state and releases resources before the app is suspended.</summary>
