@@ -108,7 +108,7 @@ namespace StreamioX.App
         {
             StartupDiagnostics.Write("Root frame navigation FAILED",
                 new Exception($"Failed to load Page {e.SourcePageType?.FullName}", e.Exception));
-            throw new Exception("Failed to load Page " + e.SourcePageType.FullName, e.Exception);
+            throw new Exception("Failed to load Page " + (e.SourcePageType?.FullName ?? "<unknown>"), e.Exception);
         }
 
         /// <summary>Persists application state and releases resources before the app is suspended.</summary>

@@ -162,10 +162,14 @@ namespace StreamioX.App.Services
             ApplyRequestHeaders(request, requestHeaders);
 
             // A direct provider URL should fail quickly when expired or
-            // blocked. A torrent loopback route can legitimately spend up to
-            // 60 seconds resolving metadata and selecting the video file.
+            // blocked. A torrent loopback route has bounded add, metadata,
+            // and readiness retries that can take roughly two minutes.
             var isLocalBridge = uri.IsLoopback;
-            var probeTimeout = TimeSpan.FromSeconds(isLocalBridge ? 75 : 15);
+            // The bridge may spend up to 60s retrying add_torrent, then wait
+            // for metadata/storage readiness. Keep the client deadline beyond
+            // the native route's bounded initialization window so its 504 and
+            // diagnostic body can reach the app instead of becoming a client timeout.
+            var probeTimeout = TimeSpan.FromSeconds(isLocalBridge ? 165 : 15);
             PlaybackDiagnostics.Write(
                 $"[Playback] HTTP probe timeout: {probeTimeout.TotalSeconds:0}s; local bridge: {isLocalBridge}.");
             using var timeout = new CancellationTokenSource(probeTimeout);
@@ -216,14 +220,23 @@ namespace StreamioX.App.Services
                 if (isLocalBridge)
                 {
                     var nativeError = StreamioX.App.NativeBridge.ReadLastError();
-                    if (!string.IsNullOrWhiteSpace(nativeError))
-                        PlaybackDiagnostics.Write($"[Torrent] Native bridge diagnostic: {nativeError}");
+                    var responseError = await response.Content
+                        .ReadAsStringAsync(timeout.Token)
+                        .ConfigureAwait(true);
+                    var diagnosticText = !string.IsNullOrWhiteSpace(responseError)
+                        ? responseError.Trim()
+                        : nativeError;
+                    if (!string.IsNullOrWhiteSpace(diagnosticText))
+                        PlaybackDiagnostics.Write($"[Torrent] Native bridge diagnostic: {diagnosticText}");
 
                     // A local 4xx/5xx means the bridge has not produced media.
                     // Unlike a provider probe, FFmpeg cannot recover this request.
+                    var diagnostic = !string.IsNullOrWhiteSpace(diagnosticText)
+                        ? $" Native torrent diagnostic: {diagnosticText}"
+                        : string.Empty;
                     throw new HttpRequestException(
                         $"Local torrent bridge returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}). " +
-                        $"Content-Type: {contentType}; host: {finalUri.Host}.");
+                        $"Content-Type: {contentType}; host: {finalUri.Host}.{diagnostic}");
                 }
 
                 PlaybackDiagnostics.Write(

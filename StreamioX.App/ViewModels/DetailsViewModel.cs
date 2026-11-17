@@ -44,6 +44,7 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] public partial Movie? SelectedMovie { get; set; }
         [ObservableProperty] public partial ObservableCollection<StreamSource> Streams { get; set; } = new();
         [ObservableProperty] public partial ObservableCollection<string> ProviderStatusLines { get; set; } = new();
+        public int StreamCount => Streams.Count;
         [ObservableProperty] public partial ObservableCollection<Video> Episodes { get; set; } = new();
         [ObservableProperty] public partial ObservableCollection<Video> SeasonEpisodes { get; set; } = new();
         [ObservableProperty] public partial ObservableCollection<int> Seasons { get; set; } = new();
@@ -144,6 +145,7 @@ namespace StreamioX.App.ViewModels
             _addonService = addonService ?? throw new ArgumentNullException(nameof(addonService));
             _torrentBridgeService = torrentBridgeService ?? throw new ArgumentNullException(nameof(torrentBridgeService));
             _libraryService = libraryService ?? throw new ArgumentNullException(nameof(libraryService));
+            Streams.CollectionChanged += (_, _) => OnPropertyChanged(nameof(StreamCount));
 
             WatchNowCommand = new AsyncRelayCommand(WatchNowAsync);
             CancelStreamSearchCommand = new RelayCommand(CancelStreamSearch);

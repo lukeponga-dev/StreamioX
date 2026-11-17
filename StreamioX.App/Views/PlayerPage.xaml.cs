@@ -30,6 +30,7 @@ namespace StreamioX.App.Views
         private DateTimeOffset _resumeWaitStartedUtc = DateTimeOffset.UtcNow;
         private bool _resumeApplied = true;
         private bool _updatingProgressSlider;
+        private bool _supportsBufferingProgress = true;
 
         public PlayerPage()
         {
@@ -240,9 +241,31 @@ namespace StreamioX.App.Views
             var session = _mediaPlayer.PlaybackSession;
             TryApplyResumePosition(session);
             ViewModel.UpdatePlaybackTime(session.Position, session.NaturalDuration);
-            ViewModel.UpdateBufferProgress(
-                session.BufferingProgress,
-                session.PlaybackState == MediaPlaybackState.Buffering);
+
+            // Some WinRT MediaPlaybackSession implementations (including the
+            // FFmpeg-backed session on this target) do not expose the
+            // BufferingProgress interface. Accessing it can raise E_NOINTERFACE
+            // from the XAML DispatcherTimer callback and terminate the app.
+            var isBuffering = session.PlaybackState == MediaPlaybackState.Buffering;
+            if (_supportsBufferingProgress)
+            {
+                try
+                {
+                    ViewModel.UpdateBufferProgress(session.BufferingProgress, isBuffering);
+                }
+                catch (Exception ex)
+                {
+                    _supportsBufferingProgress = false;
+                    ViewModel.UpdateBufferProgress(0, isBuffering);
+                    PlaybackDiagnostics.Write(
+                        $"[Playback] BufferingProgress is unsupported by this MediaPlaybackSession; " +
+                        $"buffer percentage display disabled (HRESULT 0x{ex.HResult:X8}): {ex}");
+                }
+            }
+            else
+            {
+                ViewModel.UpdateBufferProgress(0, isBuffering);
+            }
 
             if (_resumeApplied && session.PlaybackState == MediaPlaybackState.Playing &&
                 DateTimeOffset.UtcNow - _lastProgressSaveUtc >= TimeSpan.FromSeconds(15))

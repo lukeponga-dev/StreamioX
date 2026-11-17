@@ -31,17 +31,34 @@ namespace StreamioX.App.Views
 
         public MainPage()
         {
-            InitializeComponent();
-            _navigationService = AppServices.GetRequiredService<INavigationService>();
-            _authService = AppServices.GetRequiredService<IAuthService>();
-            _navigationService.Initialize(ContentFrame);
-            ContentFrame.NavigationFailed += ContentFrame_NavigationFailed;
-            ContentFrame.Navigated += ContentFrame_Navigated;
-            ViewModel = AppServices.GetRequiredService<MainViewModel>();
-            DataContext = ViewModel;
-            Loaded += MainPage_Loaded;
-            Unloaded += MainPage_Unloaded;
-            SetActiveNavigationItem("Home");
+            try
+            {
+                StartupDiagnostics.Write("MainPage constructor: before InitializeComponent");
+                InitializeComponent();
+                StartupDiagnostics.Write("MainPage constructor: InitializeComponent completed");
+
+                StartupDiagnostics.Write("MainPage constructor: resolving INavigationService");
+                _navigationService = AppServices.GetRequiredService<INavigationService>();
+                StartupDiagnostics.Write("MainPage constructor: resolving IAuthService");
+                _authService = AppServices.GetRequiredService<IAuthService>();
+                StartupDiagnostics.Write("MainPage constructor: initializing ContentFrame navigation");
+                _navigationService.Initialize(ContentFrame);
+                ContentFrame.NavigationFailed += ContentFrame_NavigationFailed;
+                ContentFrame.Navigated += ContentFrame_Navigated;
+
+                StartupDiagnostics.Write("MainPage constructor: resolving MainViewModel");
+                ViewModel = AppServices.GetRequiredService<MainViewModel>();
+                DataContext = ViewModel;
+                Loaded += MainPage_Loaded;
+                Unloaded += MainPage_Unloaded;
+                SetActiveNavigationItem("Home");
+                StartupDiagnostics.Write("MainPage constructor: completed");
+            }
+            catch (Exception ex)
+            {
+                StartupDiagnostics.Write("MainPage constructor FAILED", ex);
+                throw;
+            }
         }
 
         private void MainPage_Loaded(object sender, RoutedEventArgs e)
