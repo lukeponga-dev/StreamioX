@@ -92,6 +92,7 @@ More setup and troubleshooting notes: [Development guide](docs/DEVELOPMENT.md).
 
 ## Documentation
 
+- [Documentation index](docs/README.md)
 - [Architecture and request flows](docs/ARCHITECTURE.md)
 - [Development, build and troubleshooting](docs/DEVELOPMENT.md)
 - [Playback and torrent bridge](docs/PLAYBACK.md)
