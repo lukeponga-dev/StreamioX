@@ -18,7 +18,16 @@
                     Background="#174C3A"
                     Foreground="White"
                     FontSize="17"/>
-            <Button Content="Play Big Buck Bunny test video"
+            <Button Content="Play HEVC / H.265 diagnostic sample"
+                    Click="PlayHevcSample_Click"
+                    HorizontalAlignment="Left"
+                    Padding="24,14"
+                    Background="#174C3A"
+                    Foreground="White"
+                    FontSize="17"/>
+            <TextBlock Text="HEVC test: public CC0 H.265 MP4. Compare its playback log with the H.264 baseline. Hardware decoder selection is not exposed by current diagnostics."
+                       Foreground="#A1A1AA" FontSize="13" TextWrapping="Wrap"/>
+            <Button Content="Play Big Buck Bunny test video (H.264 baseline)"
                     Click="PlayBigBuckBunny_Click"
                     HorizontalAlignment="Left"
                     Padding="24,14"

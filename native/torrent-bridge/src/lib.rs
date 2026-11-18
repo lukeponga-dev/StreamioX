@@ -89,23 +89,27 @@ struct StreamQuery {
     magnet: Option<String>,
 }
 
-fn parse_magnet_sources(magnet: &str) -> (Option<String>, Vec<String>) {
+fn parse_magnet_sources(magnet: &str) -> (Option<String>, Vec<String>, Vec<String>) {
     let Some((_, query)) = magnet.split_once('?') else {
-        return (None, Vec::new());
+        return (None, Vec::new(), Vec::new());
     };
 
     let mut exact_source = None;
     let mut trackers = Vec::new();
+    let mut web_seeds = Vec::new();
     for (key, value) in url::form_urlencoded::parse(query.as_bytes()) {
         match key.as_ref() {
             "xs" if value.starts_with("https://") || value.starts_with("http://") => {
                 exact_source = Some(value.into_owned());
             }
             "tr" if !value.trim().is_empty() => trackers.push(value.into_owned()),
+            "ws" if value.starts_with("https://") || value.starts_with("http://") => {
+                web_seeds.push(value.into_owned());
+            }
             _ => {}
         }
     }
-    (exact_source, trackers)
+    (exact_source, trackers, web_seeds)
 }
 
 fn parse_range(headers: &HeaderMap, size: u64) -> Result<(u64, u64, bool), StatusCode> {
@@ -206,15 +210,19 @@ async fn stream_file_inner(
                 engine
             } else {
                 let magnet = query.magnet.ok_or(StatusCode::NOT_FOUND)?;
-                let (exact_source, trackers) = parse_magnet_sources(&magnet);
-                let source = if let Some(source_url) = exact_source {
-                    // An xs= exact source is a .torrent URL; otherwise retain
-                    // the complete magnet URI for librqbit's magnet parser.
+                let (exact_source, trackers, web_seeds) = parse_magnet_sources(&magnet);
+                let source = if !web_seeds.is_empty() {
+                    // Keep the complete magnet intact when ws= hints are
+                    // present. Selecting xs= here would discard those hints
+                    // before the torrent backend can inspect the magnet.
+                    TorrentSource::Url(magnet)
+                } else if let Some(source_url) = exact_source {
+                    // An xs= exact source is a .torrent URL when no web seeds
+                    // need to be retained alongside the original magnet.
                     TorrentSource::Url(source_url)
                 } else {
                     TorrentSource::Url(magnet)
                 };
-
                 let mut added = None;
                 for attempt in 1..=2 {
                     match tokio::time::timeout(
@@ -465,19 +473,40 @@ mod tests {
     #[test]
     fn magnet_exact_source_and_trackers_are_decoded() {
         let magnet = "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&tr=udp%3A%2F%2Ftracker.example%3A1337%2Fannounce&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fbig-buck-bunny.torrent";
-        let (source, trackers) = parse_magnet_sources(magnet);
+        let (source, trackers, web_seeds) = parse_magnet_sources(magnet);
         assert_eq!(
             source.as_deref(),
             Some("https://webtorrent.io/torrents/big-buck-bunny.torrent")
         );
         assert_eq!(trackers, vec!["udp://tracker.example:1337/announce"]);
+        assert!(web_seeds.is_empty());
+    }
+
+    #[test]
+    fn magnet_web_seeds_are_decoded_and_retained_with_exact_source_and_trackers() {
+        let magnet = "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&tr=udp%3A%2F%2Ftracker.example%3A1337%2Fannounce&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fmovie.torrent&ws=https%3A%2F%2Fcdn.example%2Fmovie.mp4&ws=http%3A%2F%2Fmirror.example%2Fmovie.mp4";
+        let (source, trackers, web_seeds) = parse_magnet_sources(magnet);
+
+        assert_eq!(
+            source.as_deref(),
+            Some("https://webtorrent.io/torrents/movie.torrent")
+        );
+        assert_eq!(trackers, vec!["udp://tracker.example:1337/announce"]);
+        assert_eq!(
+            web_seeds,
+            vec![
+                "https://cdn.example/movie.mp4",
+                "http://mirror.example/movie.mp4"
+            ]
+        );
     }
 
     #[test]
     fn magnet_exact_source_rejects_non_http_schemes() {
         let magnet = "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&xs=file%3A%2F%2F%2Fprivate.torrent";
-        let (source, _) = parse_magnet_sources(magnet);
+        let (source, _, web_seeds) = parse_magnet_sources(magnet);
         assert!(source.is_none());
+        assert!(web_seeds.is_empty());
     }
 
     #[test]

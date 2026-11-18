@@ -51,7 +51,7 @@ The engine must receive explicit writable app-container paths. It must never sea
 
 ### Stream URL construction
 
-For torrent sources, the managed service normalizes the info hash from hexadecimal or Base32, or extracts it from a magnet URI. It preserves provider-supplied magnet parameters such as exact torrent sources (`xs=`) and web seeds (`ws=`), along with trackers.
+For torrent sources, the managed service normalizes the info hash from hexadecimal or Base32, or extracts it from a magnet URI. It preserves provider-supplied magnet parameters such as exact torrent sources (`xs=`), web-seed hints (`ws=`) and trackers through the bridge boundary. **This does not currently provide BEP 19 web-seed playback:** the selected `librqbit 8.1.1` backend does not consume `ws=` URLs. Actual native-engine fetching and verified piece ingestion are tracked as the next native-engine task in `native/torrent-bridge/README.md`.
 
 The Stremio file index is preserved. A missing file index is represented as `-1`, allowing the native server to choose the best video file rather than blindly selecting file zero (which may be a sample, subtitle or metadata file).
 

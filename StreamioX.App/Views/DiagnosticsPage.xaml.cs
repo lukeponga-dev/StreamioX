@@ -15,6 +15,8 @@ namespace StreamioX.App.Views
     {
         private const string BigBuckBunnyUrl =
             "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4";
+        private const string HevcSampleUrl =
+            "https://cdn.truefilesize.com/mp4/sample-h265.mp4";
 
         public DiagnosticsPage()
         {
@@ -23,9 +25,24 @@ namespace StreamioX.App.Views
 
         private void PlayBigBuckBunny_Click(object sender, RoutedEventArgs e)
         {
-            PlaybackDiagnostics.Write("[PlaybackTest] Direct Big Buck Bunny button selected; navigating to PlayerPage.");
+            PlaybackDiagnostics.Write("[PlaybackTest] Direct Big Buck Bunny H.264 baseline selected; navigating to PlayerPage.");
             Frame.Navigate(typeof(PlayerPage),
                 new PlaybackRequest(BigBuckBunnyUrl, "Big Buck Bunny — FFmpeg test"));
+        }
+
+        private void PlayHevcSample_Click(object sender, RoutedEventArgs e)
+        {
+            if (!Uri.TryCreate(HevcSampleUrl, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+            {
+                PlaybackDiagnostics.Write("[HevcTest] Configured HEVC sample URL is invalid.");
+                return;
+            }
+
+            PlaybackDiagnostics.Write(
+                $"[HevcTest] HEVC/H.265 MP4 selected. Host: {uri.Host}. Starting unchanged FFmpegInteropX playback pipeline; decoder/hardware selection is not exposed by current diagnostics.");
+            Frame.Navigate(typeof(PlayerPage),
+                new PlaybackRequest(HevcSampleUrl, "HEVC / H.265 diagnostic sample"));
         }
 
         private async void PlayBigBuckBunnyTorrent_Click(object sender, RoutedEventArgs e)
