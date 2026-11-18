@@ -5,6 +5,7 @@ using StreamioX.App.Helpers;
 using StreamioX.App.Services;
 using StreamioX.App.ViewModels;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Media.Playback;
 using Windows.Media.Core;
@@ -26,6 +27,8 @@ namespace StreamioX.App.Views
         private readonly System.Threading.SemaphoreSlim _progressSaveGate = new(1, 1);
         private MediaPlaybackItem? _playbackItem;
         private PlaybackRequest? _playbackRequest;
+        private CancellationTokenSource? _playbackCancellation;
+        private long _playbackSessionId;
         private DateTimeOffset _lastProgressSaveUtc = DateTimeOffset.UtcNow;
         private DateTimeOffset _resumeWaitStartedUtc = DateTimeOffset.UtcNow;
         private bool _resumeApplied = true;
@@ -75,6 +78,30 @@ namespace StreamioX.App.Views
             Loaded += PlayerPage_Loaded;
         }
 
+        private void CancelCurrentPlayback(string reason)
+        {
+            // Invalidate the session before cancellation so queued continuations
+            // and dispatcher callbacks cannot mutate a later playback session.
+            var invalidatedSession = Interlocked.Increment(ref _playbackSessionId);
+            var cancellation = _playbackCancellation;
+            _playbackCancellation = null;
+
+            if (cancellation != null)
+            {
+                try
+                {
+                    cancellation.Cancel();
+                }
+                finally
+                {
+                    cancellation.Dispose();
+                }
+            }
+
+            PlaybackDiagnostics.Write(
+                $"[PlayerPage] Playback session invalidated ({invalidatedSession}): {reason}");
+        }
+
         private void PlayerPage_Loaded(object sender, RoutedEventArgs e)
         {
             _playbackTimer.Start();
@@ -84,6 +111,8 @@ namespace StreamioX.App.Views
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            CancelCurrentPlayback("A new playback navigation started.");
+            var sessionId = Interlocked.Increment(ref _playbackSessionId);
             Application.Current.Suspending -= App_Suspending;
             Application.Current.Suspending += App_Suspending;
             _playbackRequest = e.Parameter as PlaybackRequest;
@@ -112,17 +141,38 @@ namespace StreamioX.App.Views
 
             ShowLoadingOverlay("Preparing player...");
             ShowOsd();
-            await PlayWithFFmpegAsync(streamUrl, title, seriesTitle, requestHeaders);
+
+            var playbackCancellation = new CancellationTokenSource();
+            _playbackCancellation = playbackCancellation;
+            try
+            {
+                await PlayWithFFmpegAsync(
+                    sessionId, playbackCancellation.Token, streamUrl, title, seriesTitle, requestHeaders);
+            }
+            finally
+            {
+                if (ReferenceEquals(_playbackCancellation, playbackCancellation))
+                    _playbackCancellation = null;
+
+                // The task that created the source owns its disposal, even if
+                // a newer navigation has already installed another source.
+                playbackCancellation.Dispose();
+            }
         }
 
         /// <summary>Creates and starts the FFmpeg-backed media item while wiring playback events and error reporting.</summary>
-        private async Task PlayWithFFmpegAsync(string streamUrl, string title, string? seriesTitle = null,
+        private async Task PlayWithFFmpegAsync(long streamId, CancellationToken cancellationToken,
+            string streamUrl, string title, string? seriesTitle = null,
             System.Collections.Generic.IReadOnlyDictionary<string, string>? requestHeaders = null)
         {
             var stage = "Preparing player";
             ShowLoadingOverlay(stage);
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (streamId != Interlocked.Read(ref _playbackSessionId))
+                    return;
+
                 _mediaPlayer.Pause();
                 _mediaPlayer.Source = null;
                 _ffmpegService.Stop();
@@ -138,11 +188,23 @@ namespace StreamioX.App.Views
                         PlaybackDiagnostics.Write($"[PlayerPage] Stage: {currentStage}");
                         _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                         {
+                            if (cancellationToken.IsCancellationRequested ||
+                                streamId != Interlocked.Read(ref _playbackSessionId))
+                                return;
+
                             UpdateLoadingStatus(currentStage);
                             ViewModel.SetStreamingStatus($"Loading: {currentStage}");
                         });
                     },
-                    requestHeaders);
+                    requestHeaders,
+                    cancellationToken);
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (streamId != Interlocked.Read(ref _playbackSessionId))
+                {
+                    PlaybackDiagnostics.Write($"[PlayerPage] Discarding completed playback item for stale session {streamId}.");
+                    return;
+                }
 
                 stage = "Assigning FFmpeg item to MediaPlayer";
                 _playbackItem = playbackItem;
@@ -156,8 +218,18 @@ namespace StreamioX.App.Views
                 // Keep the overlay up until the playback session confirms it is playing.
                 ViewModel.SetStreamingStatus("Waiting for playback to start...");
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                PlaybackDiagnostics.Write($"[PlayerPage] Playback preparation cancelled for session {streamId}.");
+            }
+            catch (Exception ex) when (streamId != Interlocked.Read(ref _playbackSessionId) || cancellationToken.IsCancellationRequested)
+            {
+                PlaybackDiagnostics.Write($"[PlayerPage] Ignoring failure from stale/cancelled playback session {streamId}: {ex.Message}");
+            }
             catch (Exception ex)
             {
+                if (streamId != Interlocked.Read(ref _playbackSessionId))
+                    return;
                 var details = $"FFmpeg playback failed during: {stage}\n" +
                     $"HRESULT: 0x{ex.HResult:X8}\n" +
                     ex.ToString();
@@ -443,10 +515,14 @@ namespace StreamioX.App.Views
         /// <summary>Captures media-engine failures and displays a useful playback error to the user.</summary>
         private void MediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
         {
+            var sessionId = Interlocked.Read(ref _playbackSessionId);
             var error = $"Playback failed (0x{args.ExtendedErrorCode.HResult:X8}): {args.ErrorMessage}";
             PlaybackDiagnostics.Write($"[Playback] MediaPlayer.MediaFailed: {error}");
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
+                if (sessionId != Interlocked.Read(ref _playbackSessionId))
+                    return;
+
                 HideLoadingOverlay();
                 ViewModel.SetPlaybackError(error);
             });
@@ -471,9 +547,13 @@ namespace StreamioX.App.Views
                 return;
             }
 
+            var sessionId = Interlocked.Read(ref _playbackSessionId);
             PlaybackDiagnostics.Write($"[Playback] MediaPlayer state changed: {playbackState}; position: {position}; duration: {duration}.");
             _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
+                if (sessionId != Interlocked.Read(ref _playbackSessionId))
+                    return;
+
                 var isPlaying = playbackState == MediaPlaybackState.Playing;
                 ViewModel.SetPlaying(isPlaying);
                 if (isPlaying)
@@ -717,7 +797,10 @@ namespace StreamioX.App.Views
 
         private async void BackButton_Click(object sender, RoutedEventArgs e)
         {
-            await SaveProgressAsync();
+            // SaveProgressAsync captures the current position before its first await.
+            var saveTask = SaveProgressAsync();
+            CancelCurrentPlayback("Back navigation requested.");
+            await saveTask;
             _playbackTimer?.Stop();
             _osdTimer?.Stop();
             _mediaPlayer.Pause();
@@ -744,6 +827,7 @@ namespace StreamioX.App.Views
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            CancelCurrentPlayback("PlayerPage navigated away.");
             Application.Current.Suspending -= App_Suspending;
             _ = SaveProgressAsync();
             _playbackTimer?.Stop();

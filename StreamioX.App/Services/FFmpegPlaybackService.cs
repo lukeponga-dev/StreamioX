@@ -55,7 +55,8 @@ namespace StreamioX.App.Services
         public async Task<MediaPlaybackItem> CreateMediaPlaybackItemAsync(
             string streamUrl,
             Action<string>? reportStage = null,
-            System.Collections.Generic.IReadOnlyDictionary<string, string>? requestHeaders = null)
+            System.Collections.Generic.IReadOnlyDictionary<string, string>? requestHeaders = null,
+            CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(streamUrl))
                 throw new ArgumentException("A stream URL is required.", nameof(streamUrl));
@@ -64,14 +65,17 @@ namespace StreamioX.App.Services
                 (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                 throw new ArgumentException("FFmpeg requires an absolute HTTP or HTTPS stream URL.", nameof(streamUrl));
 
+            cancellationToken.ThrowIfCancellationRequested();
             Stop();
 
             // Probe with a one-byte range request. This catches expired links,
             // login pages, blocked hosts and broken redirects before FFmpeg opens them.
             reportStage?.Invoke("Checking direct stream HTTP response");
-            var resolvedUri = await ResolveAndValidateStreamAsync(uri, requestHeaders).ConfigureAwait(true);
+            var resolvedUri = await ResolveAndValidateStreamAsync(uri, requestHeaders, cancellationToken).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
             PlaybackDiagnostics.Write($"[Playback] Probe completed. Original host: {uri.Host}; final host: {resolvedUri.Host}. FFmpeg will receive the ORIGINAL URL.");
 
+            cancellationToken.ThrowIfCancellationRequested();
             reportStage?.Invoke("Configuring FFmpeg network input");
             // FFmpegInteropX.UWP 2.1 ships with native D3D11 hardware decoding
             // enabled for supported codecs on Xbox. This package version does not
@@ -114,11 +118,17 @@ namespace StreamioX.App.Services
             {
                 // The probe is diagnostic only. Do not substitute its redirect target:
                 // signed URLs and session-bound providers may require the original URL.
-                _mediaSource = await FFmpegMediaSource.CreateFromUriAsync(
+                var mediaSource = await FFmpegMediaSource.CreateFromUriAsync(
                     uri.AbsoluteUri, config);
+                cancellationToken.ThrowIfCancellationRequested();
+                _mediaSource = mediaSource;
                 PlaybackDiagnostics.Write(_mediaSource != null
                     ? "[Playback] FFmpegMediaSource created successfully."
                     : "[Playback] FFmpegMediaSource returned null.");
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -129,6 +139,7 @@ namespace StreamioX.App.Services
                     ex);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             if (_mediaSource == null)
                 throw new InvalidOperationException("FFmpegInteropX returned no media source after opening the HTTP stream.");
 
@@ -153,7 +164,8 @@ namespace StreamioX.App.Services
         /// <returns>The <see cref="Task{Uri}"/></returns>
         private static async Task<Uri> ResolveAndValidateStreamAsync(
             Uri uri,
-            System.Collections.Generic.IReadOnlyDictionary<string, string>? requestHeaders)
+            System.Collections.Generic.IReadOnlyDictionary<string, string>? requestHeaders,
+            CancellationToken cancellationToken)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.Range = new RangeHeaderValue(0, 0);
@@ -172,7 +184,8 @@ namespace StreamioX.App.Services
             var probeTimeout = TimeSpan.FromSeconds(isLocalBridge ? 165 : 15);
             PlaybackDiagnostics.Write(
                 $"[Playback] HTTP probe timeout: {probeTimeout.TotalSeconds:0}s; local bridge: {isLocalBridge}.");
-            using var timeout = new CancellationTokenSource(probeTimeout);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(probeTimeout);
             var client = isLocalBridge ? LocalHttp : Http;
             HttpResponseMessage response;
             try
@@ -181,6 +194,10 @@ namespace StreamioX.App.Services
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
                     timeout.Token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex) when (!isLocalBridge &&
                 (ex is HttpRequestException || ex is TaskCanceledException))
@@ -193,6 +210,7 @@ namespace StreamioX.App.Services
                 return uri;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             using (response)
             {
             var contentType = response.Content.Headers.ContentType?.MediaType ?? "unknown";

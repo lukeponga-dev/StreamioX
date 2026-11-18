@@ -3,7 +3,7 @@
     "StreamioX.App": {
       "commandName": "MsixPackage",
       "remoteDebugEnabled": false,
-      "remoteDebugMachine": "192.168.1.102",
+      "remoteDebugMachine": "192.168.1.103",
       "authenticationMode": "Universal"
     }
   }
