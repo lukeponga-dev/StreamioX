@@ -1,0 +1,301 @@
+{
+  "repo_notes": [
+    {
+      "content": " Purpose StreamioX is a controller-first UWP/XAML client for evaluating the Stremio experience on Xbox and Windows hardware, used for browsing catalogs and streaming media via add-ons and torrents."
+    }
+  ],
+  "pages": [
+    {
+      "title": "Overview",
+      "purpose": "What StreamioX is: a controller-first UWP/XAML Stremio client for Xbox with a native Rust torrent bridge. Architecture map and links to child pages.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Getting Started & Build Setup",
+      "purpose": "Prerequisites, solution layout (StreamioX.slnx), csproj/MSBuild targets, Cargo nightly torrent-bridge build, MSIX packaging, signing, launchSettings and deployment to Xbox.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Documentation Set & Store Assets",
+      "purpose": "Guide to docs/ (ARCHITECTURE, PLAYBACK, DEVELOPMENT, TESTING, TROUBLESHOOTING, PHASE-1 plan, store listing, privacy) and the Assets/ tile/logo image set.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Application Shell & Infrastructure",
+      "purpose": "App bootstrap, DI container, navigation and diagnostics — overview linking to children.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Startup Lifecycle & Dependency Injection",
+      "purpose": "App.xaml.cs lifecycle, AppServices/AppServiceCollectionExtensions registration, engine initialization, suspension handling, StartupDiagnostics logging.",
+      "parent": "Application Shell & Infrastructure",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Navigation & Main Shell",
+      "purpose": "MainPage shell, top nav, profile flyout, playback chrome, NavigationService/NavigationRoute, MainViewModel commands.",
+      "parent": "Application Shell & Infrastructure",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Diagnostics & Troubleshooting",
+      "purpose": "DiagnosticsPage/ViewModel, StartupDiagnostics log files, Diagnostics/ backups, troubleshooting workflow.",
+      "parent": "Application Shell & Infrastructure",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Stremio Add-on Integration Layer",
+      "purpose": "How the app talks to Stremio add-ons for catalogs, metadata, streams and auth. Links to children.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Add-on Management & Manifests",
+      "purpose": "AddonService, IAddonService, AddonManifest model, AddonsPage/ViewModel, installed-addons persistence.",
+      "parent": "Stremio Add-on Integration Layer",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Catalog, Metadata & Stream Services",
+      "purpose": "CatalogService, MetadataService, StreamService, StremioClient HTTP transport with retries, MemoryTtlCache.",
+      "parent": "Stremio Add-on Integration Layer",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Data Models & JSON Serialization",
+      "purpose": "Movie, StreamSource, StremioApiRequest, DetailsNavigationRequest, PlaybackRequest and source-generated StremioJsonContext for NativeAOT.",
+      "parent": "Stremio Add-on Integration Layer",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Authentication & Account Sync",
+      "purpose": "AuthService, IAuthService, AuthModels, device-link/QR login, email/authkey login, add-on collection sync.",
+      "parent": "Stremio Add-on Integration Layer",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "User Interface & Views",
+      "purpose": "Overview of the XAML views, view models and controller-first UX conventions; links to per-area children.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Home, Discover & Search",
+      "purpose": "HomePage/HomeViewModel hero rows, DiscoverPage catalog grid with genre/type pill filters, SearchPage and SearchViewModel.",
+      "parent": "User Interface & Views",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Details Page & Stream Discovery UI",
+      "purpose": "DetailsPage layout and code-behind; episode/season pickers, resume cards, available streams list.",
+      "parent": "User Interface & Views",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "DetailsViewModel Internals",
+      "purpose": "Metadata hydration, cancellation tokens, progressive stream discovery, stream scoring, library toggling, torrent bridge routing.",
+      "parent": "User Interface & Views",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Library & Settings Views",
+      "purpose": "LibraryPage/LibraryViewModel continue-watching grid; SettingsPage and SettingsViewModel (auth, telemetry, server control).",
+      "parent": "User Interface & Views",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Theming, Controls & Xbox Focus",
+      "purpose": "Themes (Colors, Typography, Controls, XboxFocus), reusable controls (MediaCardControl, HeroBannerControl), converters, FocusHelper, XboxConstants safe area.",
+      "parent": "User Interface & Views",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Playback Pipeline",
+      "purpose": "End-to-end media playback: stream URL → FFmpegInteropX → MediaPlayer, plus progress persistence. Links to children.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "FFmpeg Playback Service",
+      "purpose": "Stream validation/probing, loopback vs external HttpClients, FFmpeg MediaSourceConfig options, header sanitization, error surfacing from native bridge.",
+      "parent": "Playback Pipeline",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Player Page & OSD",
+      "purpose": "PlayerPage XAML and code-behind: OSD auto-hide, gamepad/keyboard input mapping, audio/subtitle track flyouts, resume handling, buffering fallbacks.",
+      "parent": "Playback Pipeline",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Library Persistence & Watch Progress",
+      "purpose": "LibraryService atomic JSON persistence, LibraryEntry/EpisodeProgress models, resume logic, PlayerViewModel state.",
+      "parent": "Playback Pipeline",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Native Layer (Rust)",
+      "purpose": "Overview of native/ components: the torrent bridge DLL and the stream-server/enginefs workspace.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Torrent Bridge DLL & C ABI",
+      "purpose": "lib.rs Axum/Tokio loopback server, /stream/{hash}/{idx} byte-range endpoint, librqbit engine, start/stop/last_error exports, Cargo config and UWP target.",
+      "parent": "Native Layer (Rust)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Managed Interop: NativeBridge & TorrentBridgeService",
+      "purpose": "LibraryImport P/Invoke surface, AppContainer-safe DHT/cache directories, ITorrentBridgeService lifecycle and stream URL resolution.",
+      "parent": "Native Layer (Rust)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "stream-server & enginefs Workspace",
+      "purpose": "The larger Rust stream-server workspace: enginefs backends (librqbit), compat routes, bindings — its role and relation to the torrent bridge.",
+      "parent": "Native Layer (Rust)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Testing & Tooling",
+      "purpose": "Test project and scripts — overview with children.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Unit Tests & DI Validation",
+      "purpose": "StreamioX.App.Tests project, DependencyInjectionTests, container validation guarantees.",
+      "parent": "Testing & Tooling",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Scripts & Patches",
+      "purpose": "scripts/test-di.ps1, docs/TESTING.md workflow, streamiox-feature.patch and repo hygiene files.",
+      "parent": "Testing & Tooling",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Glossary",
+      "purpose": "Definitions of StreamioX/Stremio/Xbox-specific terms with code pointers: add-on, manifest, Cinemeta, catalog extra, StreamSource, InfoHash/FileIdx, torrent bridge, librqbit, enginefs, PlaybackIntent, MSIX, NativeAOT, AppContainer, DHT folder, OSD, playback chrome, safe area, XYFocus, device-link flow, MemoryTtlCache, StremioJsonContext, LibraryEntry, continue watching, resume position, proxy headers.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    }
+  ]
+}
