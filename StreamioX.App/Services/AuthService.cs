@@ -36,7 +36,7 @@ namespace StreamioX.App.Services
         public bool IsLoggedIn => !string.IsNullOrWhiteSpace(AuthKey);
         public string? AuthKey { get; private set; }
         public StremioUser? User { get; private set; }
-        public string LastAddonSyncMessage { get; private set; } = "Add-on account sync has not run yet.";
+        public string LastExtensionSyncMessage { get; private set; } = "Add-on account sync has not run yet.";
 
         public AuthService(HttpClient httpClient, IAddonService addonService)
         {
@@ -58,19 +58,19 @@ namespace StreamioX.App.Services
                     {
                         await RefreshUserAsync().ConfigureAwait(false);
                         await _addonService.InitializeAsync().ConfigureAwait(false);
-                        await SyncAddonCollectionAsync().ConfigureAwait(false);
+                        await SyncExtensionsCollectionAsync().ConfigureAwait(false);
                     }
                     catch (HttpRequestException)
                     {
-                        LastAddonSyncMessage = "Offline: saved Stremio account is available, but cloud sync could not connect.";
+                        LastExtensionSyncMessage = "Offline: saved Stremio account is available, but cloud sync could not connect.";
                     }
                     catch (TaskCanceledException)
                     {
-                        LastAddonSyncMessage = "Stremio account sync timed out. Try again when the connection is stable.";
+                        LastExtensionSyncMessage = "Stremio account sync timed out. Try again when the connection is stable.";
                     }
                     catch (Exception ex)
                     {
-                        LastAddonSyncMessage = "Could not refresh the saved Stremio session: " + ex.Message;
+                        LastExtensionSyncMessage = "Could not refresh the saved Stremio session: " + ex.Message;
                     }
                 }
 
@@ -268,7 +268,7 @@ namespace StreamioX.App.Services
 
             AuthKey = null;
             User = null;
-            LastAddonSyncMessage = "Signed out of Stremio.";
+            LastExtensionSyncMessage = "Signed out of Stremio.";
             ClearPersist();
             SessionChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -288,7 +288,7 @@ namespace StreamioX.App.Services
         }
 
         /// <summary>Imports the account add-on collection and reconciles it with locally installed providers.</summary>
-        public async Task<AddonAccountSyncResult> SyncAddonCollectionAsync(CancellationToken cancellationToken = default)
+        public async Task<ExtenstionAccountSyncResult> SyncExtensionsCollectionAsync(CancellationToken cancellationToken = default)
         {
             if (!IsLoggedIn) throw new InvalidOperationException("Sign in to Stremio before synchronizing account add-ons.");
 
@@ -306,7 +306,7 @@ namespace StreamioX.App.Services
                 if (remote?.Addons == null)
                     throw new InvalidDataException("Stremio returned an invalid add-on collection.");
 
-                var result = new AddonAccountSyncResult();
+                var result = new ExtenstionAccountSyncResult();
                 foreach (var descriptor in remote.Addons)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -348,7 +348,7 @@ namespace StreamioX.App.Services
                 if (result.Failed > 0)
                 {
                     result.Message = $"Downloaded {result.Pulled} account add-on(s); {result.Failed} could not be imported. Cloud collection was left unchanged.";
-                    LastAddonSyncMessage = result.Message;
+                    LastExtensionSyncMessage = result.Message;
                     return result;
                 }
 
@@ -379,7 +379,7 @@ namespace StreamioX.App.Services
 
                 result.Pushed = localDescriptors.Count;
                 result.Message = $"Stremio account synchronized: {result.Pulled} downloaded, {result.Pushed} add-ons saved to your account.";
-                LastAddonSyncMessage = result.Message;
+                LastExtensionSyncMessage = result.Message;
                 return result;
             }
             finally
@@ -393,7 +393,7 @@ namespace StreamioX.App.Services
             try
             {
                 await _addonService.InitializeAsync(cancellationToken).ConfigureAwait(false);
-                await SyncAddonCollectionAsync(cancellationToken).ConfigureAwait(false);
+                await SyncExtensionsCollectionAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -401,7 +401,7 @@ namespace StreamioX.App.Services
             }
             catch (Exception ex)
             {
-                LastAddonSyncMessage = "Signed in. Add-on cloud sync will need a retry: " + ex.Message;
+                LastExtensionSyncMessage = "Signed in. Add-on cloud sync will need a retry: " + ex.Message;
             }
         }
 

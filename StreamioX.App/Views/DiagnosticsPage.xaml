@@ -9,7 +9,7 @@
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18" MaxWidth="720">
             <TextBlock Text="StreamioX Diagnostics" Foreground="White" FontSize="32" FontWeight="Bold"/>
             <TextBlock Text="Playback verification" Foreground="#A1A1AA" FontSize="18"/>
-            <TextBlock Text="Launch a public-domain sample video through the same FFmpegInteropX pipeline used by Stremio streams. This temporary test uses a direct HTTPS MP4 and does not contact torrent providers."
+            <TextBlock Text="Launch a public-domain sample video through the same FFmpegInteropX pipeline used by third party streams. This temporary test uses a direct HTTPS MP4 and does not contact torrent providers."
                        Foreground="#A1A1AA" FontSize="15" TextWrapping="Wrap"/>
             <Button Content="Play authenticated Jackettio add-on test (The Matrix)"
                     Click="PlayAuthenticatedAddon_Click"

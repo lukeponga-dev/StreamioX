@@ -36,7 +36,7 @@
   <ItemGroup>
     <Folder Include="Converters\" />
     <!-- Explicit root-level manifest assets required by Store/MSIX validation. -->
-    <Content Include="Assets\Square44x44Logo.png;Assets\Wide310x150Logo.png;Assets\SplashScreen.png;Assets\SmallTile.png;Assets\LargeTile.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Wide310x150Logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup Condition="'$(Platform)' == 'x64'">
     <!-- Include the native bridge even on a clean checkout; BuildTorrentBridge creates it before content is copied. -->

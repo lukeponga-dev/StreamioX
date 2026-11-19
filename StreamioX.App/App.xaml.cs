@@ -3,12 +3,13 @@
 using StreamioX.App.Services;
 using StreamioX.App.Views;
 using System;
+using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
+using Windows.System.Profile;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
-using Windows.System.Profile;
 
 namespace StreamioX.App
 {
@@ -16,17 +17,26 @@ namespace StreamioX.App
     {
         public App()
         {
-            // Capture the original managed/WinRT exception before XAML's global
-            // UnhandledException callback wraps or re-reports it.
             AppDomain.CurrentDomain.FirstChanceException += OnFirstChanceException;
+
+            TaskScheduler.UnobservedTaskException += (_, e) =>
+            {
+                StartupDiagnostics.Write(
+                    "UNOBSERVED TASK EXCEPTION",
+                    e.Exception);
+
+                e.SetObserved();
+            };
 
             try
             {
                 StartupDiagnostics.Write("App constructor: before InitializeComponent");
                 InitializeComponent();
-                UnhandledException += OnUnhandledException;
-                StartupDiagnostics.Write("App constructor: InitializeComponent completed; exception diagnostics attached");
 
+                UnhandledException += OnUnhandledException;
+
+                StartupDiagnostics.Write(
+                    "App constructor: InitializeComponent completed; exception diagnostics attached");
                 // RequiresPointerMode is only supported by the Xbox device family.
                 // Setting it on desktop Windows can fail during UWP activation with E_NOINTERFACE.
                 if (AnalyticsInfo.VersionInfo.DeviceFamily == "Windows.Xbox")

@@ -45,15 +45,9 @@ namespace StreamioX.App.Views
             await ViewModel.LoginEmailCommand.ExecuteAsync(null);
         }
 
-        private async void AuthKeyLogin_Click(object sender, RoutedEventArgs e)
+        private async void SyncAccountExtensions_Click(object sender, RoutedEventArgs e)
         {
-            ViewModel.AuthKeyInput = AuthKeyBox.Text;
-            await ViewModel.LoginAuthKeyCommand.ExecuteAsync(null);
-        }
-
-        private async void SyncAccountAddons_Click(object sender, RoutedEventArgs e)
-        {
-            await ViewModel.SyncAccountAddonsCommand.ExecuteAsync(null);
+            await ViewModel.SyncExtensionsCommand.ExecuteAsync(null);
         }
     }
 }

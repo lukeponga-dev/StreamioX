@@ -62,7 +62,7 @@ namespace StreamioX.App.Models
         [JsonPropertyName("lastModified")] public JsonElement LastModified { get; set; }
     }
 
-    public sealed class AddonAccountSyncResult
+    public sealed class ExtenstionAccountSyncResult
     {
         public int Pulled { get; set; }
         public int Pushed { get; set; }

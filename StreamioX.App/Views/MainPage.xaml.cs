@@ -233,7 +233,7 @@ namespace StreamioX.App.Views
             var dialog = new ContentDialog
             {
                 Title = "About StreamioX",
-                Content = "StreamioX is an Xbox-first media discovery and playback client. Catalogs, metadata and streams are supplied by your installed Stremio-compatible add-ons.",
+                Content = "StreamioX is a media discovery and playback application designed for Xbox and Windows. Content catalogs, metadata, and playback sources are provided through user-configured third-party extensions and services.",
                 CloseButtonText = "Close",
                 XamlRoot = this.XamlRoot
             };

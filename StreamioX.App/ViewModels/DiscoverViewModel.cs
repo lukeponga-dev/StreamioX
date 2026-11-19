@@ -58,78 +58,91 @@ namespace StreamioX.App.ViewModels
         /// <summary>Loads movie and series catalogs, optionally replacing an in-progress request.</summary>
         public async Task LoadCatalogAsync(bool forceRefresh = false)
         {
-            if (IsLoading && !forceRefresh)
-                return;
-
-            // A refresh supersedes the previous request. The generation check below
-            // prevents a late response from an older request replacing newer results.
-            _loadCts?.Cancel();
-            var loadCts = new CancellationTokenSource(TimeSpan.FromSeconds(35));
-            _loadCts = loadCts;
-            var generation = ++_loadGeneration;
-            var token = loadCts.Token;
-
-            IsLoading = true;
-            ErrorMessage = null;
-            StatusMessage = "Loading movies and series from Cinemeta…";
-
             try
             {
-                // Cinemeta is the default metadata catalog and should work even when
-                // the user has not installed any third-party catalog add-ons.
-                var movieTask = LoadCatalogTypeAsync("movie", token);
-                var seriesTask = LoadCatalogTypeAsync("series", token);
-                await Task.WhenAll(movieTask, seriesTask).ConfigureAwait(true);
-
-                if (generation != _loadGeneration)
+                if (IsLoading && !forceRefresh)
                     return;
 
-                var combined = movieTask.Result
-                    .Concat(seriesTask.Result)
-                    .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
-                    .GroupBy(item => (item.Type ?? "movie") + ":" + item.Id,
-                        StringComparer.OrdinalIgnoreCase)
-                    .Select(group => group.First())
-                    .ToList();
 
-                if (combined.Count == 0)
-                    throw new InvalidOperationException(
-                        "Cinemeta and your installed catalog add-ons returned no titles.");
+                // A refresh supersedes the previous request. The generation check below
+                // prevents a late response from an older request replacing newer results.
+                _loadCts?.Cancel();
+                var loadCts = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+                _loadCts = loadCts;
+                var generation = ++_loadGeneration;
+                var token = loadCts.Token;
 
-                Movies = new ObservableCollection<Movie>(combined);
-                var movieCount = Movies.Count(item =>
-                    string.Equals(item.Type, "movie", StringComparison.OrdinalIgnoreCase));
-                var seriesCount = Movies.Count(item =>
-                    string.Equals(item.Type, "series", StringComparison.OrdinalIgnoreCase));
-                StatusMessage = $"{movieCount} movies · {seriesCount} series · {Movies.Count} titles";
-            }
-            catch (OperationCanceledException)
-            {
-                if (generation != _loadGeneration)
-                    return;
+                IsLoading = true;
+                ErrorMessage = null;
+                StatusMessage = "Loading movies and series from Cinemeta…";
 
-                StatusMessage = "Catalog loading timed out or was cancelled. Try again.";
-                ErrorMessage = "The catalog request took too long. Check your connection and retry.";
+                try
+                {
+                    // Cinemeta is the default metadata catalog and should work even when
+                    // the user has not installed any third-party catalog add-ons.
+                    var movieTask = LoadCatalogTypeAsync("movie", token);
+                    var seriesTask = LoadCatalogTypeAsync("series", token);
+                    await Task.WhenAll(movieTask, seriesTask).ConfigureAwait(true);
+
+                    if (generation != _loadGeneration)
+                        return;
+
+                    var combined = movieTask.Result
+                        .Concat(seriesTask.Result)
+                        .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                        .GroupBy(item => (item.Type ?? "movie") + ":" + item.Id,
+                            StringComparer.OrdinalIgnoreCase)
+                        .Select(group => group.First())
+                        .ToList();
+
+                    if (combined.Count == 0)
+                        throw new InvalidOperationException(
+                            "Cinemeta and your installed catalog add-ons returned no titles.");
+
+                    Movies = new ObservableCollection<Movie>(combined);
+                    var movieCount = Movies.Count(item =>
+                        string.Equals(item.Type, "movie", StringComparison.OrdinalIgnoreCase));
+                    var seriesCount = Movies.Count(item =>
+                        string.Equals(item.Type, "series", StringComparison.OrdinalIgnoreCase));
+                    StatusMessage = $"{movieCount} movies · {seriesCount} series · {Movies.Count} titles";
+                }
+                catch (OperationCanceledException)
+                {
+                    if (generation != _loadGeneration)
+                        return;
+
+                    StatusMessage = "Catalog loading timed out or was cancelled. Try again.";
+                    ErrorMessage = "The catalog request took too long. Check your connection and retry.";
+                }
+                catch (Exception ex)
+                {
+                    if (generation != _loadGeneration)
+                        return;
+
+                    System.Diagnostics.Debug.WriteLine($"[StreamioX] Discover catalog failed: {ex}");
+                    StatusMessage = "Catalog unavailable";
+                    ErrorMessage = "Couldn't load the catalog. " + ex.Message;
+                    Movies = new ObservableCollection<Movie>();
+                }
+                finally
+                {
+                    loadCts.Dispose();
+                    if (generation == _loadGeneration)
+                    {
+                        _loadCts = null;
+                        IsLoading = false;
+                    }
+                }
             }
             catch (Exception ex)
             {
-                if (generation != _loadGeneration)
-                    return;
+                StartupDiagnostics.Write(
+                    "DiscoverViewModel.LoadCatalogAsync FAILED",
+                    ex);
 
-                System.Diagnostics.Debug.WriteLine($"[StreamioX] Discover catalog failed: {ex}");
-                StatusMessage = "Catalog unavailable";
-                ErrorMessage = "Couldn't load the catalog. " + ex.Message;
-                Movies = new ObservableCollection<Movie>();
+                throw;
             }
-            finally
-            {
-                loadCts.Dispose();
-                if (generation == _loadGeneration)
-                {
-                    _loadCts = null;
-                    IsLoading = false;
-                }
-            }
+
         }
 
         /// <summary>Cancels the active catalog request when Discover is left.</summary>
@@ -152,11 +165,16 @@ namespace StreamioX.App.ViewModels
             try
             {
                 var directResults = await _catalogService.GetCatalogAsync(
-                    CinemetaBaseUrl, type, "top", cancellationToken).ConfigureAwait(false);
-                if (directResults.Count > 0)
+             CinemetaBaseUrl, type, "top", cancellationToken)
+             .ConfigureAwait(false);
+
+                if (directResults is { Count: > 0 })
                 {
-                    foreach (var item in directResults)
+                    foreach (var item in directResults.Where(x => x != null))
+                    {
                         item.Type ??= type;
+                    }
+
                     return directResults;
                 }
             }
@@ -172,8 +190,10 @@ namespace StreamioX.App.ViewModels
             {
                 var addonResults = await _catalogService.GetFromInstalledAddonsAsync(
                     type, "top", cancellationToken).ConfigureAwait(false);
-                foreach (var item in addonResults)
+                foreach (var item in addonResults.Where(x => x != null))
+                {
                     item.Type ??= type;
+                }
                 return addonResults;
             }
             catch (OperationCanceledException) { throw; }

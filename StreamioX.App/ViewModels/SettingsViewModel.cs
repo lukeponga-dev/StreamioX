@@ -40,7 +40,7 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] public partial BitmapImage? QrImage { get; set; }
         [ObservableProperty] public partial bool IsLinking { get; set; }
         [ObservableProperty] public partial string? AuthStatusMessage { get; set; }
-        [ObservableProperty] public partial string AddonSyncStatus { get; set; } = "Sign in to synchronize your Stremio add-ons across devices.";
+        [ObservableProperty] public partial string ExtensionsSyncStatus { get; set; } = "Sign in to synchronize your extensions across devices.";
         [ObservableProperty] public partial bool IsTorrentServerRunning { get; set; }
         [ObservableProperty] public partial string TorrentServerAddress { get; set; } = "Not running";
         [ObservableProperty] public partial string TorrentServerStatus { get; set; } = "The local HTTP server is stopped.";
@@ -51,6 +51,7 @@ namespace StreamioX.App.ViewModels
         [ObservableProperty] public partial string? PasswordInput { get; set; }
         [ObservableProperty] public partial string? AuthKeyInput { get; set; }
 
+        /// <summary>Initializes a new instance of <see cref="SettingsViewModel"/> with required services.</summary>
         public SettingsViewModel(IAuthService authService, ITorrentBridgeService torrentBridge, INavigationService navigation, HttpClient httpClient)
         {
             _authService = authService;
@@ -71,6 +72,36 @@ namespace StreamioX.App.ViewModels
             await InitAuthAsync();
         }
 
+        /// <summary>Stops telemetry and cancels active device-link polling when leaving Settings without affecting playback.</summary>
+        public void Deactivate()
+        {
+            if (_telemetryTimer is not null)
+            {
+                _telemetryTimer.Stop();
+                _telemetryTimer = null;
+            }
+
+            var pollCts = _pollCts;
+            _pollCts = null;
+            if (pollCts is not null)
+            {
+                try
+                {
+                    if (!pollCts.IsCancellationRequested)
+                    {
+                        pollCts.Cancel();
+                    }
+                    pollCts.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Safe to ignore if already disposed when polling finishes.
+                }
+            }
+
+            IsLinking = false;
+        }
+
         private async Task InitAuthAsync()
         {
             await _authService.InitializeAsync();
@@ -83,7 +114,7 @@ namespace StreamioX.App.ViewModels
             AccountLabel = IsLoggedIn
                 ? (_authService.User?.Email ?? "Signed in")
                 : "Not signed in";
-            AddonSyncStatus = _authService.LastAddonSyncMessage;
+            ExtensionsSyncStatus = _authService.LastExtensionSyncMessage;
         }
 
         [RelayCommand]
@@ -94,9 +125,8 @@ namespace StreamioX.App.ViewModels
         /// <summary>Runs the QR or browser device-link flow, polls approval, and refreshes account UI state.</summary>
         private Task LoginWithFacebookAsync() => RunDeviceLinkLoginAsync(openBrowser: true);
 
-        // Facebook authentication is completed on Stremio's official sign-in page.
-        // The app only receives the resulting Stremio device-link auth key; it never
-        // handles or stores the user's Facebook password or access token.
+        // Authentication is completed through an external account provider.
+        // The app only receives a device authorization token.
         private async Task RunDeviceLinkLoginAsync(bool openBrowser)
         {
             _pollCts?.Cancel();
@@ -106,7 +136,7 @@ namespace StreamioX.App.ViewModels
 
             IsLinking = true;
             AuthStatusMessage = openBrowser
-                ? "Preparing secure Stremio sign-in…"
+                ? "Preparing secure sign-in…"
                 : "Creating link code…";
             QrImage = null;
             LinkCode = null;
@@ -119,8 +149,7 @@ namespace StreamioX.App.ViewModels
                 QrImage = new BitmapImage(new Uri(session.QrImageUrl));
                 AuthStatusMessage = openBrowser
                     ? "Complete Facebook sign-in in the browser. Return here when finished."
-                    : $"Scan QR or open link.stremio.com and enter code {session.Code}";
-
+                    : $"Scan the QR code or open the displayed link and enter code {session.Code}";
                 if (openBrowser)
                 {
                     var launched = await Launcher.LaunchUriAsync(new Uri(session.LinkUrl));
@@ -129,7 +158,7 @@ namespace StreamioX.App.ViewModels
                 }
 
                 // The same device-link poll handles email, Facebook and other methods
-                // offered by Stremio's hosted login page.
+                // offered by the external authentication provider.
                 while (!token.IsCancellationRequested)
                 {
                     await Task.Delay(2500, token);
@@ -214,30 +243,33 @@ namespace StreamioX.App.ViewModels
         }
 
         [RelayCommand]
-        private async Task SyncAccountAddonsAsync()
+        private async Task SyncExtensionsAsync()
         {
             if (!_authService.IsLoggedIn)
             {
-                AddonSyncStatus = "Sign in to Stremio before synchronizing account add-ons.";
+                ExtensionsSyncStatus = "Sign in before synchronizing account extensions.";
                 return;
             }
-
-            AddonSyncStatus = "Synchronizing your Stremio account add-ons…";
+            ExtensionsSyncStatus = "Synchronizing account extensions…";
             try
             {
-                var result = await _authService.SyncAddonCollectionAsync();
-                AddonSyncStatus = result.Message;
+                var result = await _authService.SyncExtensionsCollectionAsync();
+                ExtensionsSyncStatus = result.Message;
             }
             catch (Exception ex)
             {
-                AddonSyncStatus = $"Account add-on sync failed: {ex.Message}";
+                ExtensionsSyncStatus = $"Extension synchronization failed: {ex.Message}";
             }
         }
 
         [RelayCommand]
         private async Task LogoutAsync()
         {
-            _pollCts?.Cancel();
+            var pollCts = _pollCts;
+            _pollCts = null;
+
+            pollCts?.Cancel();
+            pollCts?.Dispose();
             await _authService.LogoutAsync();
             UpdateAccountUi();
             QrImage = null;
@@ -347,10 +379,31 @@ namespace StreamioX.App.ViewModels
             MemoryPercentage = limitMB > 0 ? (usageMB / limitMB) * 100 : 0;
         }
 
+        /// <summary>
+        /// Deletes cached image files from the local ImageCache folder.
+        /// </summary>
         [RelayCommand]
-        private void ClearImageCache()
+        private async Task ClearImageCacheAsync()
         {
-            // TODO
+            try
+            {
+                var cacheFolder = await ApplicationData.Current.LocalFolder
+                    .CreateFolderAsync("ImageCache", CreationCollisionOption.OpenIfExists);
+
+                var files = await cacheFolder.GetFilesAsync();
+
+                foreach (var file in files)
+                {
+                    await file.DeleteAsync(StorageDeleteOption.PermanentDelete);
+                }
+
+                AuthStatusMessage =
+                    $"Cleared {files.Count} cached image{(files.Count == 1 ? string.Empty : "s")}.";
+            }
+            catch (Exception ex)
+            {
+                AuthStatusMessage = $"Failed to clear image cache: {ex.Message}";
+            }
         }
     }
 }

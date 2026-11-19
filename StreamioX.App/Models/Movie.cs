@@ -16,6 +16,9 @@ namespace StreamioX.App.Models
         [JsonPropertyName("type")] public string? Type { get; set; }
         [JsonPropertyName("name")] public string? Title { get; set; }
         [JsonPropertyName("poster")] public string? PosterUrl { get; set; }
+        [JsonIgnore] 
+        public string SafePosterUrl => Uri.TryCreate(PosterUrl, UriKind.Absolute, out _) ? PosterUrl!
+        : "ms-appx:///Assets/Images/poster-placeholder.png";
         [JsonPropertyName("background")] public string? BackgroundUrl { get; set; }
         [JsonPropertyName("logo")] public string? LogoUrl { get; set; }
         [JsonPropertyName("description")] public string? Description { get; set; }
